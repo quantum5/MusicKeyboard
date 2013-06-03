@@ -1,0 +1,8 @@
+*.obj
+*.exe
+*.res
+/build
+/dist
+/test
+/old
+/*.pdb

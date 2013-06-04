@@ -216,7 +216,7 @@ WORD MainWindow::GetQWERTYKeyCode(WORD wKeyCode)
     if (!uiScan)
         return wKeyCode;
     UINT uiQWERTY = MapVirtualKeyEx(uiScan, MAPVK_VSC_TO_VK, hklQWERTY);
-    if (uiScan)
+    if (uiQWERTY)
         return (WORD) uiQWERTY;
     else
         return wKeyCode;
@@ -230,7 +230,7 @@ WORD MainWindow::GetRealKeyCode(WORD wQWERTYCode)
     if (!uiScan)
         return wQWERTYCode;
     UINT uiKeyCode = MapVirtualKey(uiScan, MAPVK_VSC_TO_VK);
-    if (uiScan)
+    if (uiKeyCode)
         return (WORD) uiKeyCode;
     else
         return wQWERTYCode;
@@ -262,10 +262,10 @@ int GetMIDINote(WPARAM wCode)
     return note;
 }
 
-bool MainWindow::Play(WPARAM wCode, LPARAM lParam, bool down)
+bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
 {
     int note;
-    wCode = GetQWERTYKeyCode((WORD) wCode);
+    WORD wCode = GetQWERTYKeyCode((WORD) wParam);
     if (wCode > 255 || !keymap[wCode] || (down && (lParam & 0x40000000)))
         return false;
 

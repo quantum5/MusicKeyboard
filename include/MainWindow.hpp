@@ -3,6 +3,7 @@
 #define id68C60171_0140_4DE1_B7255EFF557A74F9
 
 #include <Window.hpp>
+#include <PianoControl.hpp>
 
 #include <mmsystem.h>
 #include <commctrl.h>
@@ -32,11 +33,11 @@ protected:
     HMIDIOUT m_midi;
     bool isQWERTY;
     HKL hklQWERTY;
+    PianoControl *piano;
+    LPWSTR m_keychars;
 private:
     HFONT hFont;
     HBRUSH hBrush;
-    HBITMAP hKeyboardLayout;
-    HDC hdcKeyboard;
 };
 
 #endif

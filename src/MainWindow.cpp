@@ -21,24 +21,44 @@
 DWORD rgbWindowBackground;
 
 static char keymap[256];
+static LPWSTR keychars = 
+    L"~`\0" // F#3
+    L"\x21c6Q\0" // G3
+    L"W\0" // G#3
+    L"AZ1\0" // A3
+    L"E\0" // A#3
+    L"SX2\0" // B3
+    L"DC3\0" // C4
+    L"R\0" // C#4
+    L"FV4\0" // D4
+    L"T\0" // D#4
+    L"GB5\0" // E4
+    L"HN6\0" // F4
+    L"U\0" // F#4
+    L"JM7\0" // G4
+    L"I\0" // G#4
+    L"K,8\0" // A4
+    L"O\0" // A#4
+    L"L.9\0" // B4
+    L";/0\0" // C5
+    L"[\0" // C#5
+    L"\"-\0" // D5
+    L"]\0" // D#5
+    L"=\x21b5\0" // E5
+    L"\x2190\0" // F5
+;
+
+int dnslen(LPWSTR dns)
+{
+    LPWSTR i = dns;
+    for (; lstrlen(i); i += lstrlen(i) + 1);
+    return i - dns;
+}
 
 BOOL MainWindow::WinRegisterClass(WNDCLASS *pwc)
 {
     pwc->style = CS_HREDRAW | CS_VREDRAW;
     return __super::WinRegisterClass(pwc);
-}
-
-BOOL EnableCloseButton(const HWND hwnd, const BOOL bState)
-{
-    HMENU hMenu;
-    UINT dwExtra;
-
-    if (hwnd == NULL)
-        return FALSE;
-    if ((hMenu = GetSystemMenu(hwnd, FALSE)) == NULL)
-        return FALSE;
-    dwExtra = bState ? MF_ENABLED : (MF_DISABLED | MF_GRAYED);
-    return EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | dwExtra) != -1;
 }
 
 LRESULT MainWindow::OnCreate()
@@ -52,10 +72,6 @@ LRESULT MainWindow::OnCreate()
     hFont = CreateFontIndirect(&ncmMetrics.lfMessageFont);
     rgbWindowBackground = GetSysColor(COLOR_WINDOW);
     hBrush = GetSysColorBrush(COLOR_WINDOW);
-    hKeyboardLayout = (HBITMAP) LoadImage(GetInstance(), MAKEINTRESOURCE(RID_KEYBOARD),
-                                          IMAGE_BITMAP, 0, 0, LR_LOADTRANSPARENT);
-    hdcKeyboard = CreateCompatibleDC(GetDC(m_hwnd));
-    SelectBitmap(hdcKeyboard, hKeyboardLayout);
 
     // Children
     m_volumeLabel = CreateWindow(WC_STATIC, L"Volume:",
@@ -109,58 +125,65 @@ LRESULT MainWindow::OnCreate()
 
     if (midiOutOpen(&m_midi, 0, NULL, NULL, CALLBACK_NULL) != MMSYSERR_NOERROR)
         MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
-
-    keymap[VK_OEM_3]  = 54; // `~ key
-    keymap['Q']  = 55;
-    keymap[VK_TAB] = 55;
-    keymap['A']  = 57;
-    keymap['Z']  = 57;
-    keymap['W']  = 56;
-    keymap['E']  = 58;
-    keymap['S']  = 59;
-    keymap['X']  = 59;
-    keymap['D']  = 60;
-    keymap['C']  = 60;
-    keymap['R']  = 61;
-    keymap['F']  = 62;
-    keymap['V']  = 62;
-    keymap['T']  = 63;
-    keymap['G']  = 64;
-    keymap['B']  = 64;
-    keymap['H']  = 65;
-    keymap['N']  = 65;
-    keymap['U']  = 66;
-    keymap['J']  = 67;
-    keymap['M']  = 67;
-    keymap['I']  = 68;
-    keymap['K']  = 69;
-    keymap[VK_OEM_COMMA]  = 69;
-    keymap['O']  = 70;
-    keymap['L']  = 71;
-    keymap[VK_OEM_PERIOD]  = 71;
-    keymap[VK_OEM_1]  = 72; // ;:
-    keymap[VK_OEM_2]  = 72; // /?
-    keymap[VK_OEM_7] = 74; // '"
-    keymap[VK_OEM_4]  = 73; // [
-    keymap[VK_OEM_6]  = 75; // ]
-    keymap[VK_RETURN] = 76;
-    keymap[VK_OEM_5] = 77; // \|
-    keymap[VK_BACK] = 77;
-    keymap[0x31]  = 57;
-    keymap[0x32]  = 59;
-    keymap[0x33]  = 60;
-    keymap[0x34]  = 62;
-    keymap[0x35]  = 64;
-    keymap[0x36]  = 65;
-    keymap[0x37]  = 67;
-    keymap[0x38]  = 69;
-    keymap[0x39]  = 71;
-    keymap[0x30]  = 72;
-    keymap[VK_OEM_MINUS]  = 74;
-    keymap[VK_OEM_PLUS]  = 76;
-    PostMessage(m_hwnd, WM_INPUTLANGCHANGE, 0, 0);
     
-    SetTimer(m_hwnd, 0xDE00, 1000, NULL);
+    this->piano = PianoControl::Create(NULL, m_hwnd, WS_VISIBLE | WS_CHILD, 0, 0, 0, 0);
+    this->piano->SetBackground(
+            (HBRUSH) DefWindowProc(m_hwnd, WM_CTLCOLORSTATIC,
+                                   (WPARAM) GetDC(m_volumeLabel),
+                                   (LPARAM) m_volumeLabel));
+
+    {
+        keymap[VK_OEM_3]  = 54; // `~ key
+        keymap['Q']  = 55;
+        keymap[VK_TAB] = 55;
+        keymap['A']  = 57;
+        keymap['Z']  = 57;
+        keymap['W']  = 56;
+        keymap['E']  = 58;
+        keymap['S']  = 59;
+        keymap['X']  = 59;
+        keymap['D']  = 60;
+        keymap['C']  = 60;
+        keymap['R']  = 61;
+        keymap['F']  = 62;
+        keymap['V']  = 62;
+        keymap['T']  = 63;
+        keymap['G']  = 64;
+        keymap['B']  = 64;
+        keymap['H']  = 65;
+        keymap['N']  = 65;
+        keymap['U']  = 66;
+        keymap['J']  = 67;
+        keymap['M']  = 67;
+        keymap['I']  = 68;
+        keymap['K']  = 69;
+        keymap[VK_OEM_COMMA]  = 69;
+        keymap['O']  = 70;
+        keymap['L']  = 71;
+        keymap[VK_OEM_PERIOD]  = 71;
+        keymap[VK_OEM_1]  = 72; // ;:
+        keymap[VK_OEM_2]  = 72; // /?
+        keymap[VK_OEM_7] = 74; // '"
+        keymap[VK_OEM_4]  = 73; // [
+        keymap[VK_OEM_6]  = 75; // ]
+        keymap[VK_RETURN] = 76;
+        keymap[VK_OEM_5] = 77; // \|
+        keymap[VK_BACK] = 77;
+        keymap[0x31]  = 57;
+        keymap[0x32]  = 59;
+        keymap[0x33]  = 60;
+        keymap[0x34]  = 62;
+        keymap[0x35]  = 64;
+        keymap[0x36]  = 65;
+        keymap[0x37]  = 67;
+        keymap[0x38]  = 69;
+        keymap[0x39]  = 71;
+        keymap[0x30]  = 72;
+        keymap[VK_OEM_MINUS]  = 74;
+        keymap[VK_OEM_PLUS]  = 76;
+    }
+    m_keychars = NULL;
+    PostMessage(m_hwnd, WM_INPUTLANGCHANGE, 0, 0);
     return 0;
 }
 
@@ -183,21 +206,6 @@ HICON MainWindow::GetIcon()
 
 void MainWindow::PaintContent(PAINTSTRUCT *pps)
 {
-    BITMAP bm;
-    int cx, cy, tx, ty, x, y;
-    double ratio;
-    RECT client;
-    GetClientRect(m_hwnd, &client);
-    GetObject(hKeyboardLayout, sizeof(BITMAP), &bm);
-    cx = client.right - 24, cy = client.bottom - 117;
-    ratio = ((double) bm.bmWidth) / ((double) bm.bmHeight);
-    if (cx / ratio > cy)
-        tx = (int) (cy * ratio), ty = (int) cy;
-    else
-        tx = (int) cx, ty = (int) (cx / ratio);
-    x = 12 + (cx - tx) / 2;
-    y = 12 + (cy - ty) / 2;
-    StretchBlt(pps->hdc, x, y, tx, ty, hdcKeyboard, 0, 0, bm.bmWidth, bm.bmHeight, SRCAND);
 }
 
 void MainWindow::OnPaint()
@@ -264,16 +272,14 @@ int GetMIDINote(WPARAM wCode)
 
 bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
 {
-    int note;
+    int note, id;
     WORD wCode = GetQWERTYKeyCode((WORD) wParam);
     if (wCode > 255 || !keymap[wCode] || (down && (lParam & 0x40000000)))
         return false;
 
     note = GetMIDINote(wCode);
     if (down) {
-        int num = note;
-        while (num > 24)
-            num -= 24;
+        int num = note % 24;
         while (num < 0x7F) {
             if (num != note)
                 MIDI_MESSAGE(m_midi, 0x90, num, 0);
@@ -284,6 +290,7 @@ bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
         MIDI_MESSAGE(m_midi, 0x90, note, m_force);
     else
         MIDI_MESSAGE(m_midi, 0x90, note, 0);
+    piano->SetKeyStatus((note - 6) % 24, down);
     return true;
 }
 
@@ -314,6 +321,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 72, client.right - 94, 25));
         EndDeferWindowPos(hdwp);
 #undef REPOS
+        //REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 117));
+        if (!MoveWindow(piano->GetHWND(), 12, 12, client.right - 24, client.bottom - 117, TRUE))
+            MessageBox(m_hwnd, 0, 0, 0);
         return 0;
       }
     case WM_COMMAND:
@@ -362,6 +372,31 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         isQWERTY = lstrcmpi(buf, L"00000409") == 0;
         if (!isQWERTY && !hklQWERTY)
             hklQWERTY = LoadKeyboardLayout(L"00000409", KLF_NOTELLSHELL);
+        
+        int size = dnslen(keychars) + 1, i;
+        LPWSTR s;
+        if (m_keychars)
+            delete m_keychars;
+        m_keychars = new WCHAR[size];
+        for (i = 0; i < size; ++i) {
+            WORD scan = VkKeyScanEx(keychars[i], hklQWERTY);
+            if (LOBYTE(scan) == -1)
+                goto giveup;
+            WORD vk = GetRealKeyCode(LOBYTE(scan));
+            if (!vk || vk == LOBYTE(scan))
+                goto giveup;
+            WCHAR ch = (WCHAR) MapVirtualKey(vk, MAPVK_VK_TO_CHAR);
+            if (!ch)
+                goto giveup;
+            m_keychars[i] = ch;
+            continue;
+            
+            giveup:
+            m_keychars[i] = keychars[i];
+        }
+        
+        for (s = m_keychars, i = 0; i < 24 && lstrlen(s); s += lstrlen(s) + 1, ++i)
+            piano->SetKeyText(i, s);
       }
     case WM_CHAR:
     case WM_DEADCHAR:

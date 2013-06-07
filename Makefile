@@ -23,6 +23,7 @@ OUTDIR=build\$(BUILD)
 DISTDIR=dist\$(BUILD)
 FILES=$(OUTDIR)\Keyboard.obj \
       $(OUTDIR)\MainWindow.obj \
+      $(OUTDIR)\PianoControl.obj \
       $(OUTDIR)\Window.obj \
       $(OUTDIR)\keyboard.res
 
@@ -34,9 +35,10 @@ initdir:
 	if not exist build md dist
 	if not exist $(DISTDIR) md $(DISTDIR)
 
-$(INCDIR)\MainWindow.hpp: $(INCDIR)\Window.hpp
+$(INCDIR)\MainWindow.hpp: $(INCDIR)\Window.hpp $(INCDIR)\PianoControl.hpp
 
 $(SRCDIR)\MainWindow.cpp: $(INCDIR)\MainWindow.hpp
+$(SRCDIR)\PianoControl.cpp: $(INCDIR)\PianoControl.hpp
 $(SRCDIR)\Keyboard.cpp: $(INCDIR)\MainWindow.hpp
 $(SRCDIR)\Window.cpp: $(INCDIR)\Window.hpp
 keyboard.rc: keyboard.ico keymap.bmp

@@ -2,7 +2,6 @@
 #include <winnls.h>
 
 RID_ICON ICON keyboard.ico
-RID_KEYBOARD BITMAP keymap.bmp
 
 STRINGTABLE LANGUAGE 0x09, 0x01 // en-US
 BEGIN

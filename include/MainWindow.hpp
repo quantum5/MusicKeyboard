@@ -18,8 +18,6 @@ protected:
     LRESULT OnCreate();
     LRESULT OnDestroy();
     bool Play(WPARAM wCode, LPARAM lParam, bool down);
-    void OnPaint();
-    void PaintContent(PAINTSTRUCT *pps);
     BOOL WinRegisterClass(WNDCLASS *pwc);
     WORD GetQWERTYKeyCode(WORD wKeyCode);
     WORD GetRealKeyCode(WORD wQWERTYCode);

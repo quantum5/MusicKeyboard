@@ -41,7 +41,7 @@ $(SRCDIR)\MainWindow.cpp: $(INCDIR)\MainWindow.hpp
 $(SRCDIR)\PianoControl.cpp: $(INCDIR)\PianoControl.hpp
 $(SRCDIR)\Keyboard.cpp: $(INCDIR)\MainWindow.hpp
 $(SRCDIR)\Window.cpp: $(INCDIR)\Window.hpp
-keyboard.rc: keyboard.ico keymap.bmp
+keyboard.rc: keyboard.ico
 
 $(OUTDIR)\keyboard.res: keyboard.rc
 	$(RC) $(RCFLAGS) /fo$@ $**

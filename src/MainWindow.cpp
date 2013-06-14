@@ -58,6 +58,7 @@ int dnslen(LPWSTR dns)
 BOOL MainWindow::WinRegisterClass(WNDCLASS *pwc)
 {
     pwc->style = CS_HREDRAW | CS_VREDRAW;
+    pwc->hbrBackground = (HBRUSH) (COLOR_3DFACE + 1);
     return __super::WinRegisterClass(pwc);
 }
 
@@ -127,10 +128,7 @@ LRESULT MainWindow::OnCreate()
         MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
     
     this->piano = PianoControl::Create(NULL, m_hwnd, WS_VISIBLE | WS_CHILD, 0, 0, 0, 0);
-    this->piano->SetBackground(
-            (HBRUSH) DefWindowProc(m_hwnd, WM_CTLCOLORSTATIC,
-                                   (WPARAM) GetDC(m_volumeLabel),
-                                   (LPARAM) m_volumeLabel));
+    this->piano->SetBackground(GetSysColorBrush(COLOR_3DFACE));
 
     {
         keymap[VK_OEM_3]  = 54; // `~ key
@@ -202,18 +200,6 @@ LRESULT MainWindow::OnDestroy()
 HICON MainWindow::GetIcon()
 {
     return LoadIcon(GetInstance(), MAKEINTRESOURCE(RID_ICON));
-}
-
-void MainWindow::PaintContent(PAINTSTRUCT *pps)
-{
-}
-
-void MainWindow::OnPaint()
-{
-    PAINTSTRUCT ps;
-    BeginPaint(m_hwnd, &ps);
-    PaintContent(&ps);
-    EndPaint(m_hwnd, &ps);
 }
 
 WORD MainWindow::GetQWERTYKeyCode(WORD wKeyCode)
@@ -304,9 +290,6 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_NCDESTROY:
         PostQuitMessage(0);
         break;
-    case WM_PAINT:
-        OnPaint();
-        return 0;
     case WM_SIZE: {
         RECT client;
         HDWP hdwp;

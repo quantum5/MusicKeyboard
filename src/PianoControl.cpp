@@ -76,7 +76,7 @@ void PianoControl::SetOctaves(int octaves)
         newname = new type[7 * octaves];\
         if (store) {\
             memcpy(newname, store, min(this->octaves * 7, 7 * octaves) * sizeof(type));\
-            delete store;\
+            delete [] store;\
         } else \
             memset(newname, 0, 7 * octaves * sizeof(type));\
         store = newname;\
@@ -296,7 +296,7 @@ void PianoControl::PaintContent(PAINTSTRUCT *pps)
         int bufidx = 0; \
         if (bufsize < bufneed) { \
             if (szBuffer) \
-                delete szBuffer; \
+                delete [] szBuffer; \
             szBuffer = new WCHAR[bufneed]; \
         } \
         for (LPCWSTR c = store[i]; *c; c++) { \

@@ -376,7 +376,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         int size = dnslen(keychars) + 1, i;
         LPWSTR s;
         if (m_keychars)
-            delete m_keychars;
+            delete [] m_keychars;
         m_keychars = new WCHAR[size];
         for (i = 0; i < size; ++i) {
             WORD scan = VkKeyScanEx(keychars[i], hklQWERTY);

@@ -59,7 +59,7 @@ BOOL MainWindow::WinRegisterClass(WNDCLASS *pwc)
 {
     pwc->style = CS_HREDRAW | CS_VREDRAW;
     pwc->hbrBackground = (HBRUSH) (COLOR_3DFACE + 1);
-    return __super::WinRegisterClass(pwc);
+    return Window::WinRegisterClass(pwc);
 }
 
 LRESULT MainWindow::OnCreate()
@@ -258,7 +258,7 @@ int GetMIDINote(WPARAM wCode)
 
 bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
 {
-    int note, id;
+    int note;
     WORD wCode = GetQWERTYKeyCode((WORD) wParam);
     if (wCode > 255 || !keymap[wCode] || (down && (lParam & 0x40000000)))
         return false;
@@ -362,13 +362,13 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             delete [] m_keychars;
         m_keychars = new WCHAR[size];
         for (i = 0; i < size; ++i) {
-            WORD scan = VkKeyScanEx(keychars[i], hklQWERTY);
+            WORD scan = VkKeyScanEx(keychars[i], hklQWERTY), vk, ch;
             if (LOBYTE(scan) == -1)
                 goto giveup;
-            WORD vk = GetRealKeyCode(LOBYTE(scan));
+            vk = GetRealKeyCode(LOBYTE(scan));
             if (!vk || vk == LOBYTE(scan))
                 goto giveup;
-            WCHAR ch = (WCHAR) MapVirtualKey(vk, MAPVK_VK_TO_CHAR);
+            ch = (WCHAR) MapVirtualKey(vk, MAPVK_VK_TO_CHAR);
             if (!ch)
                 goto giveup;
             m_keychars[i] = ch;
@@ -393,7 +393,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         SetWindowLongPtr(m_hwnd, GWL_EXSTYLE, GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
         return 0;
     }
-    return __super::HandleMessage(uMsg, wParam, lParam);
+    return Window::HandleMessage(uMsg, wParam, lParam);
 }
 
 MainWindow *MainWindow::Create(LPCTSTR szTitle)

@@ -2,6 +2,7 @@
 #include <winnls.h>
 
 RID_ICON ICON keyboard.ico
+1 24 commctrl6.manifest
 
 STRINGTABLE LANGUAGE 0x09, 0x01 // en-US
 BEGIN

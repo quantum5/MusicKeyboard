@@ -3,9 +3,14 @@
 #include <windowsx.h>
 #include <stdio.h>
 
+#ifndef max
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+
 BOOL PianoControl::WinRegisterClass(WNDCLASS *pwc)
 {
-    return __super::WinRegisterClass(pwc);
+    return Window::WinRegisterClass(pwc);
 }
 
 LRESULT PianoControl::OnCreate()
@@ -493,7 +498,7 @@ LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         SetBackground((HBRUSH) wParam);
         return 0;
     }
-    return __super::HandleMessage(uMsg, wParam, lParam);
+    return Window::HandleMessage(uMsg, wParam, lParam);
 }
 
 PianoControl *PianoControl::Create(LPCTSTR szTitle, HWND hwParent,

@@ -264,6 +264,13 @@ bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
         return false;
 
     note = GetMIDINote(wCode);
+    PlayNote(note, down);
+    piano->SetKeyStatus((note - 6) % 24, down);
+    return true;
+}
+
+void MainWindow::PlayNote(int note, bool down)
+{
     if (down) {
         int num = note % 24;
         while (num < 0x7F) {
@@ -276,8 +283,6 @@ bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
         MIDI_MESSAGE(m_midi, 0x90, note, m_force);
     else
         MIDI_MESSAGE(m_midi, 0x90, note, 0);
-    piano->SetKeyStatus((note - 6) % 24, down);
-    return true;
 }
 
 LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -391,6 +396,32 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
     case WM_EXITSIZEMOVE:
         SetWindowLongPtr(m_hwnd, GWL_EXSTYLE, GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+        return 0;
+    case MMWM_NOTEID: {
+        int state = 0;
+        if (GetKeyState(VK_CONTROL) < 0)
+            state |= 0x001;
+        if (GetKeyState(VK_SHIFT) < 0)
+            state |= 0x010;
+        if (GetKeyState(VK_MENU) < 0)
+            state |= 0x100;
+
+        int note = wParam + 54;
+        switch (state) {
+        case 0x001:
+            note -= 24;
+            break;
+        case 0x010:
+            note += 24;
+            break;
+        case 0x100:
+            note += 48;
+            break;
+        }
+        return note;
+    }
+    case MMWM_TURNNOTE:
+        PlayNote((int) wParam, lParam != 0);
         return 0;
     }
     return Window::HandleMessage(uMsg, wParam, lParam);

@@ -16,6 +16,8 @@
 #define MPCM_SETKEYTEXT (WM_USER + 5)
 #define MPCM_GETBACKGROUND (WM_USER + 6)
 #define MPCM_SETBACKGROUND (WM_USER + 7)
+#define MMWM_TURNNOTE (WM_APP + 0)
+#define MMWM_NOTEID (WM_APP + 1)
 
 class PianoControl : public Window {
 public:
@@ -48,12 +50,14 @@ protected:
     BOOL WinRegisterClass(WNDCLASS *pwc);
     
     virtual int keyIDToInternal(int id, bool &black);
+    virtual int internalToKeyID(int id, bool black);
     virtual bool haveBlackToLeft(int id);
     virtual bool haveBlackToRight(int id);
     int haveBlack(int id) {
         return (haveBlackToLeft(id) ? 2 : 0) | (haveBlackToRight(id) ? 1 : 0);
     }
     virtual void UpdateKey(int key, bool black);
+    virtual int hitTest(int x, int y, bool &black);
     
     bool *blackStatus;
     bool *whiteStatus;
@@ -68,6 +72,9 @@ protected:
     HBITMAP hMemBitmap;
     HBRUSH hBackground;
     int bmx, bmy;
+    
+    bool mouseDown;
+    int lastNote, lastKey;
 };
 
 #endif

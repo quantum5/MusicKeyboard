@@ -1,4 +1,5 @@
 #include <PianoControl.hpp>
+#include <MainWindow.hpp>
 
 #include <windowsx.h>
 #include <stdio.h>
@@ -30,6 +31,8 @@ LRESULT PianoControl::OnCreate()
     
     blackStatus = whiteStatus = NULL;
     blackText = whiteText = NULL;
+    mouseDown = false;
+    lastNote = lastKey = 0;
     
     SetOctaves(2);
     return 0;
@@ -171,6 +174,16 @@ int PianoControl::keyIDToInternal(int id, bool &black) {
     return id / 12 * 7 + ret;
 }
 
+static int internalToKeyIDMap[7] = {1, 3, 5, 6, 8, 10, 11};
+
+int PianoControl::internalToKeyID(int id, bool black)
+{
+    id = id / 7 * 12 + internalToKeyIDMap[id % 7];
+    if (black)
+        --id;
+    return id;
+}
+
 bool PianoControl::haveBlackToLeft(int i) {
     switch (i % 7) {
         case 0: // G
@@ -204,6 +217,43 @@ bool PianoControl::haveBlackToRight(int i) {
             return true;
     }
     return false; // not reached
+}
+
+int PianoControl::hitTest(int x, int y, bool &black)
+{
+    RECT client;
+    int width, height;
+    int wwidth, bwidth, bheight, hbwidth;
+    
+    GetClientRect(m_hwnd, &client);
+    width = client.right - client.left;
+    height = client.bottom - client.top;
+    wwidth = width / 7 / octaves; // Displaying 14 buttons.
+    bwidth = width / 12 / octaves; // smaller
+    bheight = height / 2;
+    bheight = height / 2;
+    hbwidth = bwidth / 2;
+    
+    int key = x / wwidth;
+    int dx = x % wwidth;
+    
+    if (y < bheight && (dx < hbwidth || dx > (wwidth - hbwidth))) {
+        int temp = key;
+        if (dx >= hbwidth)
+            ++temp;
+        switch (temp % 7) {
+            case 0:
+            case 1:
+            case 2:
+            case 4:
+            case 5:
+                black = true;
+                return temp;
+        }
+    }
+    
+    black = false;
+    return key;
 }
 
 void PianoControl::PaintContent(PAINTSTRUCT *pps)
@@ -459,8 +509,41 @@ LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_SIZE:
         InvalidateRect(m_hwnd, NULL, TRUE);
         return 0;
-    case WM_LBUTTONDOWN:
-        SetFocus(hwParent);
+    case WM_LBUTTONDOWN: {
+        /*if (mouseDown)
+            return 0;*/
+        bool black;
+        int internal = hitTest(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), black);
+        int key = internalToKeyID(internal, black);
+        int external = SendMessage(hwParent, MMWM_NOTEID, key, 0);
+        SendMessage(hwParent, MMWM_TURNNOTE, external, 1);
+        SetKeyStatus(key, true);
+        lastNote = external;
+        lastKey = key;
+        mouseDown = true;
+        return 0;
+    }
+    case WM_LBUTTONUP: {
+        SendMessage(hwParent, MMWM_TURNNOTE, lastNote, 0);
+        SetKeyStatus(lastKey, false);
+        mouseDown = false;
+        return 0;
+    }
+    case WM_MOUSEMOVE:
+        if (mouseDown) {
+            bool black;
+            int internal = hitTest(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), black);
+            int key = internalToKeyID(internal, black);
+            int external = SendMessage(hwParent, MMWM_NOTEID, key, 0);
+            if (lastNote != external) {
+                SendMessage(hwParent, MMWM_TURNNOTE, lastNote, 0);
+                SetKeyStatus(lastKey, false);
+                SendMessage(hwParent, MMWM_TURNNOTE, external, 1);
+                SetKeyStatus(key, true);
+                lastNote = external;
+                lastKey = key;
+            }
+        }
         return 0;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:

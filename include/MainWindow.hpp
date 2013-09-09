@@ -13,6 +13,7 @@ class MainWindow : public Window {
 public:
     virtual LPCTSTR ClassName() { return TEXT("MusicKeyboardMain"); }
     static MainWindow *Create(LPCTSTR szTitle);
+    void PlayNote(int note, bool down);
 protected:
     LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnCreate();

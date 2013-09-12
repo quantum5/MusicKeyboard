@@ -24,22 +24,25 @@ FILES=$(OUTDIR)\Keyboard.obj \
       $(OUTDIR)\MainWindow.obj \
       $(OUTDIR)\PianoControl.obj \
       $(OUTDIR)\Window.obj \
+      $(OUTDIR)\midifile.obj \
       $(OUTDIR)\keyboard.res
 
 all: initdir $(DISTDIR)\Keyboard.exe
 
 initdir:
-	if not exist build md build
-	if not exist $(OUTDIR) md $(OUTDIR)
-	if not exist build md dist
-	if not exist $(DISTDIR) md $(DISTDIR)
+	@if not exist build md build
+	@if not exist $(OUTDIR) md $(OUTDIR)
+	@if not exist build md dist
+	@if not exist $(DISTDIR) md $(DISTDIR)
 
-$(INCDIR)\MainWindow.hpp: $(INCDIR)\Window.hpp $(INCDIR)\PianoControl.hpp
+$(INCDIR)\MainWindow.hpp: $(INCDIR)\Window.hpp $(INCDIR)\PianoControl.hpp $(INCDIR)\midifile.h
+$(INCDIR)\midifile.h: $(INCDIR)\midiinfo.h
 
 $(SRCDIR)\MainWindow.cpp: $(INCDIR)\MainWindow.hpp
 $(SRCDIR)\PianoControl.cpp: $(INCDIR)\PianoControl.hpp
 $(SRCDIR)\Keyboard.cpp: $(INCDIR)\MainWindow.hpp
 $(SRCDIR)\Window.cpp: $(INCDIR)\Window.hpp
+$(SRCDIR)\midifile.c: $(INCDIR)\midifile.h
 keyboard.rc: keyboard.ico
 
 $(OUTDIR)\keyboard.res: keyboard.rc

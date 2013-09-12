@@ -16,6 +16,7 @@
 #define KEYBOARD_SAVE       0xAB00
 #define KEYBOARD_SAVE_FILE  0xAB01
 #define KEYBOARD_BROWSE     0xAB02
+#define KEYBOARD_REOPEN     0xAB03
 #define MIDI_MESSAGE(handle, code, arg1, arg2) \
     midiOutShortMsg(handle, ((arg2 & 0x7F) << 16) |\
                     ((arg1 & 0x7F) << 8) | (code & 0xFF))
@@ -109,17 +110,20 @@ LRESULT MainWindow::OnCreate()
                     CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL, 0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_INSTRUMENT, GetInstance(), NULL);
 
-    m_saveCheck = CreateWindow(WC_BUTTON, L"Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX,
+    m_saveCheck = CreateWindow(WC_BUTTON, L"&Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_SAVE, GetInstance(), NULL);
     m_saveLabel = CreateWindow(WC_STATIC, L"File:",
             WS_CHILD | WS_VISIBLE | WS_DISABLED | SS_CENTERIMAGE, 0, 0, 0, 0,
             m_hwnd, NULL, GetInstance(), NULL);
     m_saveFile = CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, NULL,
-            WS_CHILD | WS_VISIBLE | WS_DISABLED | ES_READONLY, 0, 0, 0, 0,
+            WS_CHILD | WS_VISIBLE | WS_DISABLED, 0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_SAVE_FILE, GetInstance(), NULL);
-    m_saveBrowse = CreateWindow(WC_BUTTON, L"Browse...",
+    m_saveBrowse = CreateWindow(WC_BUTTON, L"&Browse...",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_BROWSE, GetInstance(), NULL);
+    m_reopen = CreateWindow(WC_BUTTON, L"&Reopen",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_REOPEN, GetInstance(), NULL);
     if (!m_saveLabel)
         MessageBox(m_hwnd, NULL, NULL, NULL);
 
@@ -158,6 +162,7 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_saveLabel);
     SETFONT(m_saveFile);
     SETFONT(m_saveBrowse);
+    SETFONT(m_reopen);
 #undef SETFONT
 
     if (midiOutOpen(&m_midi, 0, NULL, NULL, CALLBACK_NULL) != MMSYSERR_NOERROR)
@@ -233,6 +238,7 @@ LRESULT MainWindow::OnDestroy()
     DestroyWindow(m_saveLabel);
     DestroyWindow(m_saveFile);
     DestroyWindow(m_saveBrowse);
+    DestroyWindow(m_reopen);
     midiOutClose(m_midi);
     if (m_midifile)
         midiFileClose(m_midifile);
@@ -349,6 +355,32 @@ void MainWindow::PaintContent(PAINTSTRUCT *pps)
     SelectBrush(pps->hdc, hOldBrush);
 }
 
+void MainWindow::OnReOpenMIDI()
+{
+    char cpath[MAX_PATH * 2] = { 0 };
+    WCHAR path[MAX_PATH] = { 0 };
+
+    if (!GetDlgItemText(m_hwnd, KEYBOARD_SAVE_FILE, path, MAX_PATH))
+        return;
+
+    WideCharToMultiByte(CP_ACP, 0, path, -1, cpath, MAX_PATH * 2, NULL, NULL);
+    
+    if (m_midifile)
+        midiFileClose(m_midifile);
+    deltaTime = (DWORD) -1;
+    m_midifile = midiFileCreate(cpath, TRUE);
+    if (!m_midifile) {
+        MessageBox(m_hwnd, L"Can't open the file!\r\n\r\n"
+                           L"Check if another program is using it.",
+                   L"Error", MB_ICONERROR);
+        return;
+    }
+    midiSongAddTempo(m_midifile, 1, 150);
+    midiFileSetTracksDefaultChannel(m_midifile, 1, MIDI_CHANNEL_1);
+    midiTrackAddProgramChange(m_midifile, 1, m_instrument);
+    midiSongAddSimpleTimeSig(m_midifile, 1, 4, MIDI_NOTE_CROCHET);
+}
+
 LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg) {
@@ -374,8 +406,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 67, client.right - 94, 25));
         REPOS(m_saveCheck,      BOTTOM(22, client.bottom - 42, 50, 20));
         REPOS(m_saveLabel,      BOTTOM(27, client.bottom - 19, 30, 20));
-        REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 164, 25));
-        REPOS(m_saveBrowse,     BOTTOMRIGHT(client.right - 17, client.bottom - 17, 80, 25));
+        REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 249, 25));
+        REPOS(m_saveBrowse,     BOTTOMRIGHT(client.right - 102, client.bottom - 17, 80, 25));
+        REPOS(m_reopen,         BOTTOMRIGHT(client.right - 17, client.bottom - 17, 80, 25));
         EndDeferWindowPos(hdwp);
 #undef REPOS
         return 0;
@@ -399,13 +432,13 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     EnableWindow(m_saveLabel, checked);
                     EnableWindow(m_saveFile, checked);
                     EnableWindow(m_saveBrowse, checked);
+                    EnableWindow(m_reopen, Edit_GetTextLength(m_saveFile) > 0 ? checked : FALSE);
                     saving = checked == TRUE;
                     break;
                 }
                 case KEYBOARD_BROWSE: {
                     OPENFILENAME ofn = { sizeof(OPENFILENAME), 0 };
                     WCHAR path[MAX_PATH] = { 0 };
-                    char cpath[MAX_PATH * 2] = { 0 };
                     
                     ofn.hwndOwner = m_hwnd;
                     ofn.lpstrFilter = L"Standard MIDI Files (*.mid)\0*.mid\0All Files (*.*)\0*.*\0";
@@ -418,19 +451,20 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     if (!GetSaveFileName(&ofn))
                         break;
                     
-                    WideCharToMultiByte(CP_ACP, 0, path, -1, cpath, MAX_PATH * 2, NULL, NULL);
                     SetDlgItemText(m_hwnd, KEYBOARD_SAVE_FILE, path);
                     
-                    if (m_midifile)
-                        midiFileClose(m_midifile);
-                    m_midifile = midiFileCreate(cpath, TRUE);
-                    midiSongAddTempo(m_midifile, 1, 150);
-                    midiFileSetTracksDefaultChannel(m_midifile, 1, MIDI_CHANNEL_1);
-                    midiTrackAddProgramChange(m_midifile, 1, m_instrument);
-                    midiSongAddSimpleTimeSig(m_midifile, 1, 4, MIDI_NOTE_CROCHET);
+                    OnReOpenMIDI();
                     break;
                 }
+                case KEYBOARD_REOPEN:
+                    OnReOpenMIDI();
+                    break;
             }
+        case EN_CHANGE:
+            if (LOWORD(wParam) == KEYBOARD_SAVE_FILE &&
+                    IsDlgButtonChecked(m_hwnd, KEYBOARD_SAVE) &&
+                    Edit_GetTextLength(m_saveFile) > 0)
+                EnableWindow(m_reopen, TRUE);
         }
         break;
     case WM_HSCROLL:

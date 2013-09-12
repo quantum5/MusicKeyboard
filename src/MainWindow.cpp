@@ -2,6 +2,7 @@
 
 #include <resource.h>
 #include <commctrl.h>
+#include <commdlg.h>
 #include <windowsx.h>
 
 #define LEFT(x, y, cx, cy) x, y, cx, cy
@@ -12,11 +13,24 @@
 #define KEYBOARD_VOLUME     0xAA01
 #define KEYBOARD_FORCE      0xAA02
 #define KEYBOARD_INSTRUMENT 0xAA03
+#define KEYBOARD_SAVE       0xAB00
+#define KEYBOARD_SAVE_FILE  0xAB01
+#define KEYBOARD_BROWSE     0xAB02
 #define MIDI_MESSAGE(handle, code, arg1, arg2) \
     midiOutShortMsg(handle, ((arg2 & 0x7F) << 16) |\
                     ((arg1 & 0x7F) << 8) | (code & 0xFF))
 
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "comdlg32.lib")
+
+#include <stdio.h>
+#define MessageIntBox(hwnd, i, title, opt) \
+    do { \
+        char buf[16]; \
+        sprintf(buf, "%d", i); \
+        MessageBoxA(hwnd, buf, title, opt); \
+    } while (0)
+
 
 DWORD rgbWindowBackground;
 
@@ -95,6 +109,20 @@ LRESULT MainWindow::OnCreate()
                     CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL, 0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_INSTRUMENT, GetInstance(), NULL);
 
+    m_saveCheck = CreateWindow(WC_BUTTON, L"Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_SAVE, GetInstance(), NULL);
+    m_saveLabel = CreateWindow(WC_STATIC, L"File:",
+            WS_CHILD | WS_VISIBLE | WS_DISABLED | SS_CENTERIMAGE, 0, 0, 0, 0,
+            m_hwnd, NULL, GetInstance(), NULL);
+    m_saveFile = CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, NULL,
+            WS_CHILD | WS_VISIBLE | WS_DISABLED | ES_READONLY, 0, 0, 0, 0,
+            m_hwnd, (HMENU) KEYBOARD_SAVE_FILE, GetInstance(), NULL);
+    m_saveBrowse = CreateWindow(WC_BUTTON, L"Browse...",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_BROWSE, GetInstance(), NULL);
+    if (!m_saveLabel)
+        MessageBox(m_hwnd, NULL, NULL, NULL);
+
     SendMessage(m_volumeBar, TBM_SETRANGEMIN, FALSE, 0x0000);
     SendMessage(m_volumeBar, TBM_SETRANGEMAX, FALSE, 0xFFFF);
     SendMessage(m_forceBar, TBM_SETRANGE, FALSE, 127 << 16);
@@ -102,6 +130,10 @@ LRESULT MainWindow::OnCreate()
     SendMessage(m_forceBar, TBM_SETPOS, FALSE, 64);
     m_force = 64;
     m_volume = 0xFFFF;
+    m_midifile = NULL;
+    m_instrument = 0;
+    saving = false;
+    deltaTime = (DWORD) -1;
 
     WCHAR buf[MAX_PATH];
     int piano;
@@ -122,6 +154,10 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_forceBar);
     SETFONT(m_instruLabel);
     SETFONT(m_instruSelect);
+    SETFONT(m_saveCheck);
+    SETFONT(m_saveLabel);
+    SETFONT(m_saveFile);
+    SETFONT(m_saveBrowse);
 #undef SETFONT
 
     if (midiOutOpen(&m_midi, 0, NULL, NULL, CALLBACK_NULL) != MMSYSERR_NOERROR)
@@ -193,7 +229,13 @@ LRESULT MainWindow::OnDestroy()
     DestroyWindow(m_forceBar);
     DestroyWindow(m_instruLabel);
     DestroyWindow(m_instruSelect);
+    DestroyWindow(m_saveCheck);
+    DestroyWindow(m_saveLabel);
+    DestroyWindow(m_saveFile);
+    DestroyWindow(m_saveBrowse);
     midiOutClose(m_midi);
+    if (m_midifile)
+        midiFileClose(m_midifile);
     return 0;
 }
 
@@ -279,10 +321,32 @@ void MainWindow::PlayNote(int note, bool down)
             num += 24;
         }
     }
-    if (down)
-        MIDI_MESSAGE(m_midi, 0x90, note, m_force);
-    else
-        MIDI_MESSAGE(m_midi, 0x90, note, 0);
+    MIDI_MESSAGE(m_midi, down ? 0x90 : 0x80, note, m_force);
+    
+    if (m_midifile && saving) {
+        if (deltaTime == (DWORD) -1)
+            deltaTime = GetTickCount();
+        midiTrackAddRest(m_midifile, 1, GetTickCount() - deltaTime, TRUE);
+        midiTrackAddMsg(m_midifile, 1, down ? msgNoteOn : msgNoteOff, note, m_force);
+        deltaTime = GetTickCount();
+    }
+}
+
+
+void MainWindow::PaintContent(PAINTSTRUCT *pps)
+{
+    HPEN hOldPen = SelectPen(pps->hdc, GetStockPen(DC_PEN));
+    HBRUSH hOldBrush = SelectBrush(pps->hdc, GetSysColorBrush(COLOR_3DFACE));
+    RECT client;
+    
+    GetClientRect(m_hwnd, &client);
+    SetBkColor(pps->hdc, GetSysColor(COLOR_3DFACE));
+    SetDCPenColor(pps->hdc, GetSysColor(COLOR_3DHILIGHT));
+    
+    RoundRect(pps->hdc, 12, client.bottom - 52, client.right - 12, client.bottom - 12, 5, 5);
+    
+    SelectPen(pps->hdc, hOldPen);
+    SelectBrush(pps->hdc, hOldBrush);
 }
 
 LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -301,19 +365,21 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         GetClientRect(m_hwnd, &client);
 #define REPOS(hwnd, k) hdwp = DeferWindowPos(hdwp, hwnd, 0, k, SWP_NOACTIVATE|SWP_NOZORDER)
         hdwp = BeginDeferWindowPos(14);
-        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 12, 70, 25));
-        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 12, client.right - 94, 25));
-        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 42, 70, 25));
-        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 42, client.right - 94, 25));
-        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 72, 70, 25));
-        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 72, client.right - 94, 25));
+        REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 172));
+        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 127, 70, 25));
+        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 127, client.right - 94, 25));
+        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 97, 70, 25));
+        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 97, client.right - 94, 25));
+        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 67, 70, 25));
+        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 67, client.right - 94, 25));
+        REPOS(m_saveCheck,      BOTTOM(22, client.bottom - 42, 50, 20));
+        REPOS(m_saveLabel,      BOTTOM(27, client.bottom - 19, 30, 20));
+        REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 164, 25));
+        REPOS(m_saveBrowse,     BOTTOMRIGHT(client.right - 17, client.bottom - 17, 80, 25));
         EndDeferWindowPos(hdwp);
 #undef REPOS
-        //REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 117));
-        if (!MoveWindow(piano->GetHWND(), 12, 12, client.right - 24, client.bottom - 117, TRUE))
-            MessageBox(m_hwnd, 0, 0, 0);
         return 0;
-      }
+    }
     case WM_COMMAND:
         switch (HIWORD(wParam)) {
         case CBN_SELCHANGE:
@@ -322,6 +388,48 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 m_instrument = SendMessage((HWND) lParam, CB_GETITEMDATA,
                         SendMessage((HWND) lParam, CB_GETCURSEL, 0, 0), 0);
                 MIDI_MESSAGE(m_midi, 0xC0, m_instrument, 0);
+                if (m_midifile && saving)
+                    midiTrackAddProgramChange(m_midifile, 1, m_instrument);
+            }
+        case BN_CLICKED:
+            switch (LOWORD(wParam)) {
+                case KEYBOARD_SAVE: {
+                    BOOL checked = !IsDlgButtonChecked(m_hwnd, KEYBOARD_SAVE);
+                    Button_SetCheck(m_saveCheck, checked);
+                    EnableWindow(m_saveLabel, checked);
+                    EnableWindow(m_saveFile, checked);
+                    EnableWindow(m_saveBrowse, checked);
+                    saving = checked == TRUE;
+                    break;
+                }
+                case KEYBOARD_BROWSE: {
+                    OPENFILENAME ofn = { sizeof(OPENFILENAME), 0 };
+                    WCHAR path[MAX_PATH] = { 0 };
+                    char cpath[MAX_PATH * 2] = { 0 };
+                    
+                    ofn.hwndOwner = m_hwnd;
+                    ofn.lpstrFilter = L"Standard MIDI Files (*.mid)\0*.mid\0All Files (*.*)\0*.*\0";
+                    ofn.lpstrFile = path;
+                    ofn.nMaxFile = MAX_PATH;
+                    ofn.lpstrTitle = L"Save MIDI Output...";
+                    ofn.Flags = OFN_EXPLORER | OFN_OVERWRITEPROMPT;
+                    ofn.lpstrDefExt = L"txt";
+
+                    if (!GetSaveFileName(&ofn))
+                        break;
+                    
+                    WideCharToMultiByte(CP_ACP, 0, path, -1, cpath, MAX_PATH * 2, NULL, NULL);
+                    SetDlgItemText(m_hwnd, KEYBOARD_SAVE_FILE, path);
+                    
+                    if (m_midifile)
+                        midiFileClose(m_midifile);
+                    m_midifile = midiFileCreate(cpath, TRUE);
+                    midiSongAddTempo(m_midifile, 1, 150);
+                    midiFileSetTracksDefaultChannel(m_midifile, 1, MIDI_CHANNEL_1);
+                    midiTrackAddProgramChange(m_midifile, 1, m_instrument);
+                    midiSongAddSimpleTimeSig(m_midifile, 1, 4, MIDI_NOTE_CROCHET);
+                    break;
+                }
             }
         }
         break;
@@ -385,7 +493,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         
         for (s = m_keychars, i = 0; i < 24 && lstrlen(s); s += lstrlen(s) + 1, ++i)
             piano->SetKeyText(i, s);
-      }
+    }
     case WM_CHAR:
     case WM_DEADCHAR:
     case WM_SYSCHAR:
@@ -430,7 +538,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 MainWindow *MainWindow::Create(LPCTSTR szTitle)
 {
     MainWindow *self = new MainWindow();
-    RECT client = {0, 0, 622, 286};
+    RECT client = {0, 0, 622, 341};
     AdjustWindowRect(&client, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE);
     if (self &&
         self->WinCreateWindow(0,

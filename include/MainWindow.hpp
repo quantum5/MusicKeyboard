@@ -24,13 +24,14 @@ protected:
     WORD GetQWERTYKeyCode(WORD wKeyCode);
     WORD GetRealKeyCode(WORD wQWERTYCode);
     virtual void PaintContent(PAINTSTRUCT *pps);
+    void OnReOpenMIDI();
 
     virtual HICON GetIcon();
     
     HWND m_volumeLabel, m_volumeBar;
     HWND m_forceLabel, m_forceBar;
     HWND m_instruLabel, m_instruSelect;
-    HWND m_saveCheck, m_saveLabel, m_saveFile, m_saveBrowse;
+    HWND m_saveCheck, m_saveLabel, m_saveFile, m_saveBrowse, m_reopen;
     int m_instrument, m_volume, m_force;
     HMIDIOUT m_midi;
     bool isQWERTY;

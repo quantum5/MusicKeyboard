@@ -8,7 +8,7 @@ RC=$(KROSS)windres
 LINK = $(CXX)
 CFLAGS = -O3 -Iinclude -DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -DWINVER=0x0501 -D_WIN32_WINNT=0x0501
 RCFLAGS = -Iinclude
-LDFLAGS = -s
+LDFLAGS = -s -static -static-libstdc++ -mwindows -lgdi32 -lwinmm -lcomctl32 -lcomdlg32
 
 FILES=build/Keyboard.o build/MainWindow.o build/Window.o \
       build/PianoControl.o build/midifile.o build/resources.o

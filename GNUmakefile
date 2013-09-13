@@ -32,7 +32,7 @@ build/PianoControl.o: src/PianoControl.cpp include/PianoControl.hpp
 build/midifile.o: src/midifile.c include/midifile.h
 
 build/resources.o: keyboard.rc include/resource.h commctrl6.manifest
-	$(RC) $< -o $@
+	$(RC) $(RCFLAGS) $< -o $@
 
 build/%.o: src/%.cpp
 	$(CXX) $(CFLAGS) -c $< -o $@

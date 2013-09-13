@@ -13,7 +13,10 @@ LDFLAGS = -s
 FILES=build/Keyboard.o build/MainWindow.o build/Window.o \
       build/PianoControl.o build/midifile.o build/resources.o
 
-all: MusicKeyboard.exe
+all: initdir MusicKeyboard.exe
+
+initdir:
+	[ -d build ] || mkdir build
 
 MusicKeyboard.exe: $(FILES)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(FILES) -o $@

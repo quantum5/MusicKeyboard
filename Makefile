@@ -29,6 +29,9 @@ FILES=$(OUTDIR)\Keyboard.obj \
 
 all: initdir $(DISTDIR)\Keyboard.exe
 
+upx: all
+	upx --best $(DISTDIR)\Keyboard.exe
+
 initdir:
 	@if not exist build md build
 	@if not exist $(OUTDIR) md $(OUTDIR)

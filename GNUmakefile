@@ -8,7 +8,7 @@ RC=$(KROSS)windres
 LINK = $(CXX)
 CFLAGS = -O3 -Iinclude -DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -DWINVER=0x0501 -D_WIN32_WINNT=0x0501
 RCFLAGS = -Iinclude
-LDFLAGS = -s -static -static-libstdc++ -mwindows -lgdi32 -lwinmm -lcomctl32 -lcomdlg32
+LDFLAGS = -s -static -static-libstdc++ -mwindows
 
 FILES=build/Keyboard.o build/MainWindow.o build/Window.o \
       build/PianoControl.o build/midifile.o build/resources.o
@@ -19,7 +19,7 @@ initdir:
 	[ -d build ] || mkdir build
 
 MusicKeyboard.exe: $(FILES)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(FILES) -o $@
+	$(LINK) $(CFLAGS) $(LDFLAGS) $(FILES) -o $@ -lgdi32 -lwinmm -lcomctl32 -lcomdlg32
 
 include/MainWindow.hpp: include/Window.hpp include/PianoControl.hpp include/midifile.h
 include/PianoControl.hpp: include/Window.hpp

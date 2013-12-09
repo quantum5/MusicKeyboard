@@ -21,7 +21,7 @@ initdir:
 MusicKeyboard.exe: $(FILES)
 	$(LINK) $(CFLAGS) $(LDFLAGS) $(FILES) -o $@ -lgdi32 -lwinmm -lcomctl32 -lcomdlg32
 
-include/MainWindow.hpp: include/Window.hpp include/PianoControl.hpp include/midifile.h
+include/MainWindow.hpp: include/Window.hpp include/PianoControl.hpp include/midifile.h include/mkntapi.h
 include/PianoControl.hpp: include/Window.hpp
 include/midifile.h: include/midiinfo.h
 
@@ -43,4 +43,3 @@ build/%.o: src/%.c
 clean:
 	rm -f build/*.o
 	rm -f MusicKeyboard.exe
-

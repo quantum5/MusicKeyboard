@@ -38,7 +38,7 @@ initdir:
 	@if not exist build md dist
 	@if not exist $(DISTDIR) md $(DISTDIR)
 
-$(INCDIR)\MainWindow.hpp: $(INCDIR)\Window.hpp $(INCDIR)\PianoControl.hpp $(INCDIR)\midifile.h
+$(INCDIR)\MainWindow.hpp: $(INCDIR)\Window.hpp $(INCDIR)\PianoControl.hpp $(INCDIR)\midifile.h $(INCDIR)\mkntapi.h
 $(INCDIR)\midifile.h: $(INCDIR)\midiinfo.h
 
 $(SRCDIR)\MainWindow.cpp: $(INCDIR)\MainWindow.hpp

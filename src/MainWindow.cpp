@@ -13,6 +13,7 @@
 #define KEYBOARD_VOLUME     0xAA01
 #define KEYBOARD_FORCE      0xAA02
 #define KEYBOARD_INSTRUMENT 0xAA03
+#define KEYBOARD_USE_BEEP   0xAAFF
 #define KEYBOARD_SAVE       0xAB00
 #define KEYBOARD_SAVE_FILE  0xAB01
 #define KEYBOARD_BROWSE     0xAB02
@@ -36,7 +37,7 @@
 DWORD rgbWindowBackground;
 
 static char keymap[256];
-static LPWSTR keychars = 
+static LPWSTR keychars =
     L"~`\0" // F#3
     L"\x21c6Q\0" // G3
     L"W\0" // G#3
@@ -62,6 +63,18 @@ static LPWSTR keychars =
     L"=\x21b5\0" // E5
     L"\x2190\0" // F5
 ;
+
+static WORD frequency[] = {
+    8, 9, 9, 10, 10, 11, 12, 12, 13, 14, 15, 15, 16, 17, 18, 19, 21, 22, 23,
+    24, 26, 28, 29, 31, 33, 35, 37, 39, 41, 44, 46, 49, 52, 55, 58, 62, 65,
+    69, 73, 78, 82, 87, 92, 98, 104, 110, 117, 123, 131, 139, 147, 156, 165,
+    175, 185, 196, 208, 220, 233, 247, 262, 277, 294, 311, 330, 349, 370, 392,
+    415, 440, 466, 494, 523, 554, 587, 622, 659, 698, 740, 784, 831, 880, 932,
+    988, 1047, 1109, 1175, 1245, 1319, 1397, 1480, 1568, 1661, 1760, 1865,
+    1976, 2093, 2217, 2349, 2489, 2637, 2794, 2960, 3136, 3322, 3520, 3729,
+    3951, 4186, 4435, 4699, 4978, 5274, 5588, 5920, 5920, 6645, 7040, 7459,
+    7902, 8372, 8870, 9397, 9956, 10548, 11175, 11840, 12544
+};
 
 int dnslen(LPWSTR dns)
 {
@@ -110,6 +123,9 @@ LRESULT MainWindow::OnCreate()
                     CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL, 0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_INSTRUMENT, GetInstance(), NULL);
 
+    m_beepCheck = CreateWindow(WC_BUTTON, L"&Beep?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_USE_BEEP, GetInstance(), NULL);
+
     m_saveCheck = CreateWindow(WC_BUTTON, L"&Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_SAVE, GetInstance(), NULL);
     m_saveLabel = CreateWindow(WC_STATIC, L"File:",
@@ -118,14 +134,12 @@ LRESULT MainWindow::OnCreate()
     m_saveFile = CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, NULL,
             WS_CHILD | WS_VISIBLE | WS_DISABLED, 0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_SAVE_FILE, GetInstance(), NULL);
-    m_saveBrowse = CreateWindow(WC_BUTTON, L"&Browse...",
+    m_saveBrowse = CreateWindow(WC_BUTTON, L"B&rowse...",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_BROWSE, GetInstance(), NULL);
-    m_reopen = CreateWindow(WC_BUTTON, L"&Reopen",
+    m_reopen = CreateWindow(WC_BUTTON, L"R&eopen",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_REOPEN, GetInstance(), NULL);
-    if (!m_saveLabel)
-        MessageBox(m_hwnd, NULL, NULL, NULL);
 
     SendMessage(m_volumeBar, TBM_SETRANGEMIN, FALSE, 0x0000);
     SendMessage(m_volumeBar, TBM_SETRANGEMAX, FALSE, 0xFFFF);
@@ -158,6 +172,7 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_forceBar);
     SETFONT(m_instruLabel);
     SETFONT(m_instruSelect);
+    SETFONT(m_beepCheck);
     SETFONT(m_saveCheck);
     SETFONT(m_saveLabel);
     SETFONT(m_saveFile);
@@ -165,11 +180,23 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_reopen);
 #undef SETFONT
 
-    if (midiOutOpen(&m_midi, 0, NULL, NULL, CALLBACK_NULL) != MMSYSERR_NOERROR)
+    if (midiOutOpen(&m_midi, 0, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
         MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
-    
+
     this->piano = PianoControl::Create(NULL, m_hwnd, WS_VISIBLE | WS_CHILD, 0, 0, 0, 0);
     this->piano->SetBackground(GetSysColorBrush(COLOR_3DFACE));
+
+    // Beep Initialization
+    F_RtlInitUnicodeString = (T_RtlInitUnicodeString) GetProcAddress(GetModuleHandleA("ntdll"), "RtlInitUnicodeString");
+    F_NtCreateFile = (T_NtCreateFile) GetProcAddress(GetModuleHandleA("ntdll"), "NtCreateFile");
+
+    if (!F_RtlInitUnicodeString || !F_NtCreateFile) {
+        EnableWindow(m_beepCheck, FALSE);
+    } else {
+        F_RtlInitUnicodeString(&usBeepDevice, L"\\Device\\Beep");
+        hBeep = NULL;
+        useBeep = false;
+    }
 
     {
         keymap[VK_OEM_3]  = 54; // `~ key
@@ -234,6 +261,7 @@ LRESULT MainWindow::OnDestroy()
     DestroyWindow(m_forceBar);
     DestroyWindow(m_instruLabel);
     DestroyWindow(m_instruSelect);
+    DestroyWindow(m_beepCheck);
     DestroyWindow(m_saveCheck);
     DestroyWindow(m_saveLabel);
     DestroyWindow(m_saveFile);
@@ -319,16 +347,51 @@ bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
 
 void MainWindow::PlayNote(int note, bool down)
 {
-    if (down) {
-        int num = note % 24;
-        while (num < 0x7F) {
-            if (num != note)
-                MIDI_MESSAGE(m_midi, 0x90, num, 0);
-            num += 24;
+    if (useBeep) {
+        BEEP_PARAM param = {frequency[note], (ULONG) -1};
+
+        if (down) {
+            OBJECT_ATTRIBUTES ObjectAttributes;
+            IO_STATUS_BLOCK IoStatusBlock;
+            NTSTATUS status;
+
+            if (hBeep)
+                CloseHandle(hBeep);
+            lastFrequency = param.Frequency;
+
+            if (param.Frequency < 0x25 || param.Frequency > 0x7FFF)
+                return; // Out of range
+
+            InitializeObjectAttributes(&ObjectAttributes, &usBeepDevice, 0, NULL, NULL);
+            status = F_NtCreateFile(&hBeep, FILE_READ_DATA | FILE_WRITE_DATA,
+                                    &ObjectAttributes, &IoStatusBlock, NULL, 0,
+                                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                    FILE_OPEN_IF, 0, NULL, 0);
+            if (NT_SUCCESS(status)) {
+                DeviceIoControl(hBeep, IOCTL_BEEP_SET, &param, sizeof param, NULL, 0, NULL, NULL);
+            } else {
+                MessageBox(m_hwnd, TEXT("Fail to open the beep device."),
+                           TEXT("Fatal Error"), MB_ICONERROR);
+            }
+        } else {
+            // Kill the current beep ONLY if no new beep has hijacked the handle
+            if (lastFrequency == param.Frequency && hBeep) {
+                CloseHandle(hBeep);
+                hBeep = NULL;
+            }
         }
+    } else {
+        if (down) {
+            int num = note % 24;
+            while (num < 0x7F) {
+                if (num != note)
+                    MIDI_MESSAGE(m_midi, 0x90, num, 0);
+                num += 24;
+            }
+        }
+        MIDI_MESSAGE(m_midi, down ? 0x90 : 0x80, note, m_force);
     }
-    MIDI_MESSAGE(m_midi, down ? 0x90 : 0x80, note, m_force);
-    
+
     if (m_midifile && saving) {
         if (deltaTime == (DWORD) -1)
             deltaTime = GetTickCount();
@@ -344,13 +407,13 @@ void MainWindow::PaintContent(PAINTSTRUCT *pps)
     HPEN hOldPen = SelectPen(pps->hdc, GetStockPen(DC_PEN));
     HBRUSH hOldBrush = SelectBrush(pps->hdc, GetSysColorBrush(COLOR_3DFACE));
     RECT client;
-    
+
     GetClientRect(m_hwnd, &client);
     SetBkColor(pps->hdc, GetSysColor(COLOR_3DFACE));
     SetDCPenColor(pps->hdc, GetSysColor(COLOR_3DHILIGHT));
-    
+
     RoundRect(pps->hdc, 12, client.bottom - 52, client.right - 12, client.bottom - 12, 5, 5);
-    
+
     SelectPen(pps->hdc, hOldPen);
     SelectBrush(pps->hdc, hOldBrush);
 }
@@ -364,7 +427,7 @@ void MainWindow::OnReOpenMIDI()
         return;
 
     WideCharToMultiByte(CP_ACP, 0, path, -1, cpath, MAX_PATH * 2, NULL, NULL);
-    
+
     if (m_midifile)
         midiFileClose(m_midifile);
     deltaTime = (DWORD) -1;
@@ -409,6 +472,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 249, 25));
         REPOS(m_saveBrowse,     BOTTOMRIGHT(client.right - 102, client.bottom - 17, 80, 25));
         REPOS(m_reopen,         BOTTOMRIGHT(client.right - 17, client.bottom - 17, 80, 25));
+        REPOS(m_beepCheck,      BOTTOMRIGHT(client.right - 17, client.bottom - 42, 60, 20));
         EndDeferWindowPos(hdwp);
 #undef REPOS
         return 0;
@@ -436,10 +500,14 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     saving = checked == TRUE;
                     break;
                 }
+                case KEYBOARD_USE_BEEP:
+                    useBeep = !IsDlgButtonChecked(m_hwnd, KEYBOARD_USE_BEEP);
+                    Button_SetCheck(m_beepCheck, useBeep);
+                    break;
                 case KEYBOARD_BROWSE: {
                     OPENFILENAME ofn = { sizeof(OPENFILENAME), 0 };
                     WCHAR path[MAX_PATH] = { 0 };
-                    
+
                     ofn.hwndOwner = m_hwnd;
                     ofn.lpstrFilter = L"Standard MIDI Files (*.mid)\0*.mid\0All Files (*.*)\0*.*\0";
                     ofn.lpstrFile = path;
@@ -450,9 +518,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
                     if (!GetSaveFileName(&ofn))
                         break;
-                    
+
                     SetDlgItemText(m_hwnd, KEYBOARD_SAVE_FILE, path);
-                    
+
                     OnReOpenMIDI();
                     break;
                 }
@@ -502,7 +570,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         isQWERTY = lstrcmpi(buf, L"00000409") == 0;
         if (!isQWERTY && !hklQWERTY)
             hklQWERTY = LoadKeyboardLayout(L"00000409", KLF_NOTELLSHELL);
-        
+
         int size = dnslen(keychars) + 1, i;
         LPWSTR s;
         if (m_keychars)
@@ -520,11 +588,11 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 goto giveup;
             m_keychars[i] = ch;
             continue;
-            
+
             giveup:
             m_keychars[i] = keychars[i];
         }
-        
+
         for (s = m_keychars, i = 0; i < 24 && lstrlen(s); s += lstrlen(s) + 1, ++i)
             piano->SetKeyText(i, s);
     }

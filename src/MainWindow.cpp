@@ -306,10 +306,9 @@ WORD MainWindow::GetRealKeyCode(WORD wQWERTYCode)
         return wQWERTYCode;
 }
 
-int GetMIDINote(WPARAM wCode)
-{
+int ModifyNote(int note, bool &half) {
     int state = 0;
-    int note;
+    
     if (GetKeyState(VK_CONTROL) < 0)
         state |= 0x001;
     if (GetKeyState(VK_SHIFT) < 0)
@@ -317,31 +316,57 @@ int GetMIDINote(WPARAM wCode)
     if (GetKeyState(VK_MENU) < 0)
         state |= 0x100;
 
-    note = keymap[wCode];
     switch (state) {
-    case 0x001:
+    case 0x011:
         note -= 24;
+        half = false;
+        break;
+    case 0x001:
+        note -= 12;
+        half = true;
         break;
     case 0x010:
-        note += 24;
+        note += 12;
+        half = true;
         break;
     case 0x100:
+        note += 24;
+        half = false;
+        break;
+    case 0x101:
+        note += 36;
+        half = true;
+        break;
+    case 0x110:
         note += 48;
+        half = false;
         break;
     }
+    return note;
+}
+
+int GetMIDINote(WPARAM wCode, bool &half)
+{
+    int note = keymap[wCode];
+    note = ModifyNote(note, half);
     return note;
 }
 
 bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
 {
     int note;
+    bool half;
     WORD wCode = GetQWERTYKeyCode((WORD) wParam);
     if (wCode > 255 || !keymap[wCode] || (down && (lParam & 0x40000000)))
         return false;
 
-    note = GetMIDINote(wCode);
+    note = GetMIDINote(wCode, half);
     PlayNote(note, down);
-    piano->SetKeyStatus((note - 6) % 24, down);
+    note -= 6;
+    if (half)
+        note += 12;
+    note %= 24;
+    piano->SetKeyStatus(note, down);
     return true;
 }
 
@@ -608,26 +633,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         SetWindowLongPtr(m_hwnd, GWL_EXSTYLE, GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
         return 0;
     case MMWM_NOTEID: {
-        int state = 0;
-        if (GetKeyState(VK_CONTROL) < 0)
-            state |= 0x001;
-        if (GetKeyState(VK_SHIFT) < 0)
-            state |= 0x010;
-        if (GetKeyState(VK_MENU) < 0)
-            state |= 0x100;
-
         int note = wParam + 54;
-        switch (state) {
-        case 0x001:
-            note -= 24;
-            break;
-        case 0x010:
-            note += 24;
-            break;
-        case 0x100:
-            note += 48;
-            break;
-        }
+        bool half;
+        note = ModifyNote(note, half);
         return note;
     }
     case MMWM_TURNNOTE:

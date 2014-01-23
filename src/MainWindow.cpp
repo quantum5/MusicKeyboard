@@ -151,7 +151,7 @@ LRESULT MainWindow::OnCreate()
     m_midifile = NULL;
     m_instrument = 0;
     saving = false;
-    deltaTime = (DWORD) -1;
+    lastTime = (DWORD) -1;
 
     WCHAR buf[MAX_PATH];
     int piano;
@@ -183,6 +183,7 @@ LRESULT MainWindow::OnCreate()
     if (midiOutOpen(&m_midi, 0, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
         MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
 
+    memset(state, 0, 128 * sizeof(bool));
     this->piano = PianoControl::Create(NULL, m_hwnd, WS_VISIBLE | WS_CHILD, 0, 0, 0, 0);
     this->piano->SetBackground(GetSysColorBrush(COLOR_3DFACE));
 
@@ -372,6 +373,23 @@ bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
 
 void MainWindow::PlayNote(int note, bool down)
 {
+    bool save = m_midifile && saving;
+    if (save) {
+        if (lastTime == (DWORD) -1)
+            lastTime = GetTickCount();
+        midiTrackAddRest(m_midifile, 1, GetTickCount() - lastTime, TRUE);
+        midiTrackAddMsg(m_midifile, 1, down ? msgNoteOn : msgNoteOff, note, m_force);
+        lastTime = GetTickCount();
+    }
+
+    for (int i = note % 12; i < 0x7F; i += 12) {
+        if (i != note && state[i]) {
+            if (!useBeep) MIDI_MESSAGE(m_midi, 0x90, i, 0);
+            if (save)     midiTrackAddMsg(m_midifile, 1, msgNoteOff, i, 0);
+            state[i] = false;
+        }
+    }
+
     if (useBeep) {
         BEEP_PARAM param = {frequency[note], (ULONG) -1};
 
@@ -406,24 +424,9 @@ void MainWindow::PlayNote(int note, bool down)
             }
         }
     } else {
-        if (down) {
-            int num = note % 24;
-            while (num < 0x7F) {
-                if (num != note)
-                    MIDI_MESSAGE(m_midi, 0x90, num, 0);
-                num += 24;
-            }
-        }
         MIDI_MESSAGE(m_midi, down ? 0x90 : 0x80, note, m_force);
     }
-
-    if (m_midifile && saving) {
-        if (deltaTime == (DWORD) -1)
-            deltaTime = GetTickCount();
-        midiTrackAddRest(m_midifile, 1, GetTickCount() - deltaTime, TRUE);
-        midiTrackAddMsg(m_midifile, 1, down ? msgNoteOn : msgNoteOff, note, m_force);
-        deltaTime = GetTickCount();
-    }
+    state[note] = down;
 }
 
 
@@ -455,7 +458,7 @@ void MainWindow::OnReOpenMIDI()
 
     if (m_midifile)
         midiFileClose(m_midifile);
-    deltaTime = (DWORD) -1;
+    lastTime = (DWORD) -1;
     m_midifile = midiFileCreate(cpath, TRUE);
     if (!m_midifile) {
         MessageBox(m_hwnd, L"Can't open the file!\r\n\r\n"

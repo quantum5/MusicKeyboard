@@ -43,6 +43,7 @@ protected:
 
     virtual HICON GetIcon();
 
+    bool state[128];
     bool useBeep;
     HANDLE hBeep;
     unsigned lastFrequency;
@@ -62,7 +63,7 @@ protected:
     PianoControl *piano;
     LPWSTR m_keychars;
     MIDI_FILE *m_midifile;
-    DWORD deltaTime;
+    DWORD lastTime;
     bool saving;
 private:
     HFONT hFont;

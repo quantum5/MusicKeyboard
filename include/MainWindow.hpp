@@ -25,6 +25,16 @@
 #define GET_KEYSTATE_WPARAM(wParam) (LOWORD(wParam))
 #endif
 
+#define KEYBOARD_IMAGE      0xAA00
+#define KEYBOARD_VOLUME     0xAA01
+#define KEYBOARD_FORCE      0xAA02
+#define KEYBOARD_INSTRUMENT 0xAA03
+#define KEYBOARD_USE_BEEP   0xAAFF
+#define KEYBOARD_SAVE       0xAB00
+#define KEYBOARD_SAVE_FILE  0xAB01
+#define KEYBOARD_BROWSE     0xAB02
+#define KEYBOARD_REOPEN     0xAB03
+
 class MainWindow : public Window {
 public:
     virtual LPCTSTR ClassName() { return TEXT("MusicKeyboardMain"); }
@@ -67,7 +77,6 @@ protected:
     bool saving;
 private:
     HFONT hFont;
-    HBRUSH hBrush;
 };
 
 #endif

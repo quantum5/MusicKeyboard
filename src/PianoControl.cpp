@@ -584,13 +584,13 @@ LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     return Window::HandleMessage(uMsg, wParam, lParam);
 }
 
-PianoControl *PianoControl::Create(LPCTSTR szTitle, HWND hwParent,
+PianoControl *PianoControl::Create(LPCTSTR szTitle, HWND hwParent, DWORD dwDlgID,
                                    DWORD dwStyle, int x, int y, int cx, int cy)
 {
     PianoControl *self = new PianoControl();
     if (self &&
         self->WinCreateWindow(0, szTitle, dwStyle, x, y, cx, cy,
-                              hwParent, NULL)) {
+                              hwParent, (HMENU) dwDlgID)) {
         return self;
     }
     delete self;

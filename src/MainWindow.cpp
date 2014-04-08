@@ -9,15 +9,6 @@
 #define RIGHT(x, y, cx, cy) (x - cx), y, cx, cy
 #define BOTTOM(x, y, cx, cy) x, (y - cy), cx, cy
 #define BOTTOMRIGHT(x, y, cx, cy) (x - cx), (y - cy), cx, cy
-#define KEYBOARD_IMAGE      0xAA00
-#define KEYBOARD_VOLUME     0xAA01
-#define KEYBOARD_FORCE      0xAA02
-#define KEYBOARD_INSTRUMENT 0xAA03
-#define KEYBOARD_USE_BEEP   0xAAFF
-#define KEYBOARD_SAVE       0xAB00
-#define KEYBOARD_SAVE_FILE  0xAB01
-#define KEYBOARD_BROWSE     0xAB02
-#define KEYBOARD_REOPEN     0xAB03
 #define MIDI_MESSAGE(handle, code, arg1, arg2) \
     midiOutShortMsg(handle, ((arg2 & 0x7F) << 16) |\
                     ((arg1 & 0x7F) << 8) | (code & 0xFF))
@@ -32,9 +23,6 @@
         sprintf(buf, "%d", i); \
         MessageBoxA(hwnd, buf, title, opt); \
     } while (0)
-
-
-DWORD rgbWindowBackground;
 
 static char keymap[256];
 static LPWSTR keychars =
@@ -99,8 +87,6 @@ LRESULT MainWindow::OnCreate()
     GetClientRect(m_hwnd, &client);
 
     hFont = CreateFontIndirect(&ncmMetrics.lfMessageFont);
-    rgbWindowBackground = GetSysColor(COLOR_WINDOW);
-    hBrush = GetSysColorBrush(COLOR_WINDOW);
 
     // Children
     m_volumeLabel = CreateWindow(WC_STATIC, L"Volume:",
@@ -113,33 +99,34 @@ LRESULT MainWindow::OnCreate()
             WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
             m_hwnd, NULL, GetInstance(), NULL);
 
-    m_volumeBar = CreateWindow(TRACKBAR_CLASS, NULL,
-            WS_CHILD | WS_VISIBLE | TBS_NOTICKS, 0, 0, 0, 0,
-            m_hwnd, (HMENU) KEYBOARD_VOLUME, GetInstance(), NULL);
-    m_forceBar = CreateWindow(TRACKBAR_CLASS, NULL,
-            WS_CHILD | WS_VISIBLE | TBS_NOTICKS, 0, 0, 0, 0,
-            m_hwnd, (HMENU) KEYBOARD_FORCE, GetInstance(), NULL);
     m_instruSelect = CreateWindow(WC_COMBOBOX, NULL, WS_CHILD | WS_VISIBLE |
-                    CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL, 0, 0, 0, 0,
+                    CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP,
+            0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_INSTRUMENT, GetInstance(), NULL);
+    m_forceBar = CreateWindow(TRACKBAR_CLASS, NULL,
+            WS_CHILD | WS_VISIBLE | TBS_NOTICKS | WS_TABSTOP, 0, 0, 0, 0,
+            m_hwnd, (HMENU) KEYBOARD_FORCE, GetInstance(), NULL);
+    m_volumeBar = CreateWindow(TRACKBAR_CLASS, NULL,
+            WS_CHILD | WS_VISIBLE | TBS_NOTICKS | WS_TABSTOP, 0, 0, 0, 0,
+            m_hwnd, (HMENU) KEYBOARD_VOLUME, GetInstance(), NULL);
 
-    m_beepCheck = CreateWindow(WC_BUTTON, L"&Beep?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX,
-            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_USE_BEEP, GetInstance(), NULL);
-
-    m_saveCheck = CreateWindow(WC_BUTTON, L"&Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX,
+    m_saveCheck = CreateWindow(WC_BUTTON, L"&Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_SAVE, GetInstance(), NULL);
     m_saveLabel = CreateWindow(WC_STATIC, L"File:",
             WS_CHILD | WS_VISIBLE | WS_DISABLED | SS_CENTERIMAGE, 0, 0, 0, 0,
             m_hwnd, NULL, GetInstance(), NULL);
     m_saveFile = CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, NULL,
-            WS_CHILD | WS_VISIBLE | WS_DISABLED, 0, 0, 0, 0,
+            WS_CHILD | WS_VISIBLE | WS_DISABLED | WS_TABSTOP, 0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_SAVE_FILE, GetInstance(), NULL);
     m_saveBrowse = CreateWindow(WC_BUTTON, L"B&rowse...",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED,
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_BROWSE, GetInstance(), NULL);
     m_reopen = CreateWindow(WC_BUTTON, L"R&eopen",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED,
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_REOPEN, GetInstance(), NULL);
+
+    m_beepCheck = CreateWindow(WC_BUTTON, L"&Beep?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX | WS_TABSTOP,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_USE_BEEP, GetInstance(), NULL);
 
     SendMessage(m_volumeBar, TBM_SETRANGEMIN, FALSE, 0x0000);
     SendMessage(m_volumeBar, TBM_SETRANGEMAX, FALSE, 0xFFFF);
@@ -184,7 +171,9 @@ LRESULT MainWindow::OnCreate()
         MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
 
     memset(state, 0, 128 * sizeof(bool));
-    this->piano = PianoControl::Create(NULL, m_hwnd, WS_VISIBLE | WS_CHILD, 0, 0, 0, 0);
+    this->piano = PianoControl::Create(NULL, m_hwnd, KEYBOARD_IMAGE,
+                                       WS_VISIBLE | WS_CHILD | WS_TABSTOP,
+                                       0, 0, 0, 0);
     this->piano->SetBackground(GetSysColorBrush(COLOR_3DFACE));
 
     // Beep Initialization
@@ -196,9 +185,8 @@ LRESULT MainWindow::OnCreate()
     } else {
         F_RtlInitUnicodeString(&usBeepDevice, L"\\Device\\Beep");
         hBeep = NULL;
-        useBeep = false;
     }
-
+    useBeep = false;
     {
         keymap[VK_OEM_3]  = 54; // `~ key
         keymap['Q']  = 55;
@@ -581,6 +569,11 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         break;
     case WM_KEYUP:
     case WM_SYSKEYUP:
+        if (wParam == VK_ESCAPE) {
+            HWND hwnd = GetNextDlgTabItem(m_hwnd, GetFocus(), GetKeyState(VK_SHIFT) < 0);
+            SetFocus(hwnd);
+            return 0;
+        }
         if (Play(wParam, lParam, false))
             return 0;
         break;

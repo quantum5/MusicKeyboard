@@ -14,6 +14,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         ShowWindow(win->GetHWND(), nCmdShow);
         MSG msg;
         while (GetMessage(&msg, NULL, 0, 0) > 0) {
+            if (msg.message == WM_KEYUP && msg.wParam == VK_ESCAPE) {
+                SendMessage(win->GetHWND(), WM_KEYUP, VK_ESCAPE, msg.lParam);
+                continue;
+            }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }

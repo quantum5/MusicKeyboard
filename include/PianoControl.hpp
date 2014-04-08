@@ -22,7 +22,7 @@
 class PianoControl : public Window {
 public:
     virtual LPCTSTR ClassName() { return TEXT("KeyboardControl"); }
-    static PianoControl *Create(LPCTSTR szTitle, HWND hwParent,
+    static PianoControl *Create(LPCTSTR szTitle, HWND hwParent, DWORD dwDlgID,
                                 DWORD dwStyle = 0,
                                 int x = CW_USEDEFAULT, int y = CW_USEDEFAULT,
                                 int cx = CW_USEDEFAULT, int cy = CW_USEDEFAULT);

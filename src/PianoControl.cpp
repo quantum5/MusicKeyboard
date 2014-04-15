@@ -473,7 +473,8 @@ void PianoControl::OnPaint()
         hMemDC = CreateCompatibleDC(hdc);
     if (!hMemBitmap || cx > bmx || cy > bmy) {
         if (hMemBitmap)
-            DeleteObject(hMemBitmap);
+            if (!DeleteObject(hMemBitmap))
+                MessageBox(m_hwnd, L"FAILED TO DELETE BITMAP", NULL, 0);
         bmx = cx + 50;
         bmy = cy + 50;
         hMemBitmap = CreateCompatibleBitmap(hdc, bmx, bmy);
@@ -488,6 +489,7 @@ void PianoControl::OnPaint()
         BitBlt(hdc, x, y, cx, cy, hMemDC, x, y, SRCCOPY);
 
         SelectObject(hMemDC, hbmPrev);
+        ps.hdc = hdc;
     } else
         PaintContent(&ps);
     EndPaint(m_hwnd, &ps);

@@ -471,12 +471,12 @@ void PianoControl::OnPaint()
     
     if (!hMemDC)
         hMemDC = CreateCompatibleDC(hdc);
-    if (!hMemBitmap)
-        hMemBitmap = CreateCompatibleBitmap(hdc, cx + 50, cy + 50);
-    if (cx > bmx || cy > bmy) {
+    if (!hMemBitmap || cx > bmx || cy > bmy) {
         if (hMemBitmap)
             DeleteObject(hMemBitmap);
-        hMemBitmap = CreateCompatibleBitmap(hdc, cx + 50, cy + 50);
+        bmx = cx + 50;
+        bmy = cy + 50;
+        hMemBitmap = CreateCompatibleBitmap(hdc, bmx, bmy);
     }
     if (hMemDC && hMemBitmap) {
         ps.hdc = hMemDC;
@@ -510,8 +510,6 @@ LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         InvalidateRect(m_hwnd, NULL, TRUE);
         return 0;
     case WM_LBUTTONDOWN: {
-        /*if (mouseDown)
-            return 0;*/
         bool black;
         int internal = hitTest(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), black);
         int key = internalToKeyID(internal, black);
@@ -521,6 +519,7 @@ LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         lastNote = external;
         lastKey = key;
         mouseDown = true;
+        SetFocus(m_hwnd);
         return 0;
     }
     case WM_LBUTTONUP: {

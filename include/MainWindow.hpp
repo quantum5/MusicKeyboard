@@ -29,6 +29,7 @@
 #define KEYBOARD_VOLUME     0xAA01
 #define KEYBOARD_FORCE      0xAA02
 #define KEYBOARD_INSTRUMENT 0xAA03
+#define KEYBOARD_DEVICE     0xAA04
 #define KEYBOARD_USE_BEEP   0xAAFF
 #define KEYBOARD_SAVE       0xAB00
 #define KEYBOARD_SAVE_FILE  0xAB01
@@ -57,6 +58,9 @@ protected:
     bool useBeep;
     HANDLE hBeep;
     unsigned lastFrequency;
+
+    int currentDevice, deviceCount;
+
     UNICODE_STRING usBeepDevice;
     T_RtlInitUnicodeString F_RtlInitUnicodeString;
     T_NtCreateFile F_NtCreateFile;
@@ -64,6 +68,7 @@ protected:
     HWND m_volumeLabel, m_volumeBar;
     HWND m_forceLabel, m_forceBar;
     HWND m_instruLabel, m_instruSelect;
+    HWND m_deviceLabel, m_deviceSelect;
     HWND m_beepCheck;
     HWND m_saveCheck, m_saveLabel, m_saveFile, m_saveBrowse, m_reopen;
     int m_instrument, m_volume, m_force;

@@ -157,9 +157,12 @@ LRESULT MainWindow::OnCreate()
     m_instruLabel = CreateWindow(WC_STATIC, L"Instrument:",
             WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
             m_hwnd, NULL, GetInstance(), NULL);
+    m_deviceLabel = CreateWindow(WC_STATIC, L"Instrument:",
+            WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
+            m_hwnd, NULL, GetInstance(), NULL);
 
     m_instruSelect = CreateWindow(WC_COMBOBOX, NULL, WS_CHILD | WS_VISIBLE |
-                    CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP,
+            CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP,
             0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_INSTRUMENT, GetInstance(), NULL);
     m_forceBar = CreateWindow(TRACKBAR_CLASS, NULL,
@@ -168,6 +171,9 @@ LRESULT MainWindow::OnCreate()
     m_volumeBar = CreateWindow(TRACKBAR_CLASS, NULL,
             WS_CHILD | WS_VISIBLE | TBS_NOTICKS | WS_TABSTOP, 0, 0, 0, 0,
             m_hwnd, (HMENU) KEYBOARD_VOLUME, GetInstance(), NULL);
+    m_deviceSelect = CreateWindow(WC_COMBOBOX, NULL,
+            WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_DEVICE, GetInstance(), NULL);
 
     m_saveCheck = CreateWindow(WC_BUTTON, L"&Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_SAVE, GetInstance(), NULL);
@@ -199,25 +205,15 @@ LRESULT MainWindow::OnCreate()
     saving = false;
     lastTime = (DWORD) -1;
 
-    WCHAR buf[MAX_PATH];
-    int piano;
-    SendMessage(m_instruSelect, CB_INITSTORAGE, 128, 4096);
-    for (int i = 0; i < 128; ++i) {
-        int id;
-        LoadString(GetInstance(), 0xAE00 | i, buf, MAX_PATH);
-        id = SendMessage(m_instruSelect, CB_ADDSTRING, 0, (LPARAM) buf);
-        SendMessage(m_instruSelect, CB_SETITEMDATA, id, i);
-    }
-    LoadString(GetInstance(), 0xAE00, buf, MAX_PATH);
-    piano = SendMessage(m_instruSelect, CB_FINDSTRING, 0, (LPARAM) buf);
-    SendMessage(m_instruSelect, CB_SETCURSEL, piano, 0);
-#define SETFONT(hwnd) PostMessage(hwnd, WM_SETFONT, (WPARAM) hFont, (LPARAM) TRUE)
+#define SETFONT(hwnd) SendMessage(hwnd, WM_SETFONT, (WPARAM) hFont, (LPARAM) TRUE)
     SETFONT(m_volumeLabel);
     SETFONT(m_volumeBar);
     SETFONT(m_forceLabel);
     SETFONT(m_forceBar);
     SETFONT(m_instruLabel);
     SETFONT(m_instruSelect);
+    SETFONT(m_deviceLabel);
+    SETFONT(m_deviceSelect);
     SETFONT(m_beepCheck);
     SETFONT(m_saveCheck);
     SETFONT(m_saveLabel);
@@ -226,7 +222,33 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_reopen);
 #undef SETFONT
 
-    if (midiOutOpen(&m_midi, 0, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
+    {
+        WCHAR buf[MAX_PATH];
+        int piano;
+        SendMessage(m_instruSelect, CB_INITSTORAGE, 128, 4096);
+        for (int i = 0; i < 128; ++i) {
+            int id;
+            LoadString(GetInstance(), 0xAE00 | i, buf, MAX_PATH);
+            id = SendMessage(m_instruSelect, CB_ADDSTRING, 0, (LPARAM) buf);
+            SendMessage(m_instruSelect, CB_SETITEMDATA, id, i);
+        }
+        LoadString(GetInstance(), 0xAE00, buf, MAX_PATH);
+        piano = SendMessage(m_instruSelect, CB_FINDSTRING, 0, (LPARAM) buf);
+        SendMessage(m_instruSelect, CB_SETCURSEL, piano, 0);
+    }
+    {
+        MIDIOUTCAPS caps;
+        deviceCount = midiOutGetNumDevs();
+        currentDevice = 0;
+        SendMessage(m_deviceSelect, CB_INITSTORAGE, deviceCount, 4096);
+        for (int i = 0; i < deviceCount; ++i) {
+            midiOutGetDevCaps(i, &caps, sizeof caps);
+            SendMessage(m_deviceSelect, CB_ADDSTRING, 0, (LPARAM) caps.szPname);
+        }
+        SendMessage(m_deviceSelect, CB_SETCURSEL, currentDevice, 0);
+    }
+
+    if (midiOutOpen(&m_midi, currentDevice, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
         MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
 
     memset(active, 0, sizeof active);
@@ -259,6 +281,8 @@ LRESULT MainWindow::OnDestroy()
     DestroyWindow(m_forceBar);
     DestroyWindow(m_instruLabel);
     DestroyWindow(m_instruSelect);
+    DestroyWindow(m_deviceLabel);
+    DestroyWindow(m_deviceSelect);
     DestroyWindow(m_beepCheck);
     DestroyWindow(m_saveCheck);
     DestroyWindow(m_saveLabel);
@@ -496,13 +520,15 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         GetClientRect(m_hwnd, &client);
 #define REPOS(hwnd, k) hdwp = DeferWindowPos(hdwp, hwnd, 0, k, SWP_NOACTIVATE|SWP_NOZORDER)
         hdwp = BeginDeferWindowPos(14);
-        REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 172));
-        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 127, 70, 25));
-        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 127, client.right - 94, 25));
-        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 97, 70, 25));
-        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 97, client.right - 94, 25));
-        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 67, 70, 25));
-        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 67, client.right - 94, 25));
+        REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 202));
+        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 157, 70, 25));
+        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 157, client.right - 94, 25));
+        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 127, 70, 25));
+        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 127, client.right - 94, 25));
+        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 97, 70, 25));
+        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 97, client.right - 94, 25));
+        REPOS(m_deviceLabel,    BOTTOM(12, client.bottom - 67, 70, 25));
+        REPOS(m_deviceSelect,   BOTTOM(82, client.bottom - 67, client.right - 94, 25));
         REPOS(m_saveCheck,      BOTTOM(22, client.bottom - 42, 50, 20));
         REPOS(m_saveLabel,      BOTTOM(27, client.bottom - 19, 30, 20));
         REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 249, 25));
@@ -523,7 +549,15 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 MIDI_MESSAGE(m_midi, 0xC0, m_instrument, 0);
                 if (m_midifile && saving)
                     midiTrackAddProgramChange(m_midifile, 1, m_instrument);
+                return 0;
+            case KEYBOARD_DEVICE:
+                currentDevice = SendMessage((HWND) lParam, CB_GETCURSEL, 0, 0);
+                midiOutClose(m_midi);
+                if (midiOutOpen(&m_midi, currentDevice, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
+                    MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
+                return 0;
             }
+            break;
         case BN_CLICKED:
             switch (LOWORD(wParam)) {
                 case KEYBOARD_SAVE: {
@@ -564,6 +598,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     OnReOpenMIDI();
                     break;
             }
+            break;
         case EN_CHANGE:
             if (LOWORD(wParam) == KEYBOARD_SAVE_FILE &&
                     IsDlgButtonChecked(m_hwnd, KEYBOARD_SAVE) &&
@@ -664,7 +699,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 MainWindow *MainWindow::Create(LPCTSTR szTitle)
 {
     MainWindow *self = new MainWindow();
-    RECT client = {0, 0, 622, 341};
+    RECT client = {0, 0, 622, 371};
     AdjustWindowRect(&client, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE);
     if (self &&
         self->WinCreateWindow(0,

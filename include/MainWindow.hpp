@@ -53,7 +53,7 @@ protected:
 
     virtual HICON GetIcon();
 
-    bool state[128];
+    int active[128];
     bool useBeep;
     HANDLE hBeep;
     unsigned lastFrequency;

@@ -25,6 +25,61 @@
     } while (0)
 
 static char keymap[256];
+
+struct _keymap_init_class {
+    _keymap_init_class() {
+        memset(keymap, 0, sizeof keymap);
+        keymap[VK_OEM_3]  = 54; // `~ key
+        keymap['Q']  = 55;
+        keymap[VK_TAB] = 55;
+        keymap['A']  = 57;
+        keymap['Z']  = 57;
+        keymap['W']  = 56;
+        keymap['E']  = 58;
+        keymap['S']  = 59;
+        keymap['X']  = 59;
+        keymap['D']  = 60;
+        keymap['C']  = 60;
+        keymap['R']  = 61;
+        keymap['F']  = 62;
+        keymap['V']  = 62;
+        keymap['T']  = 63;
+        keymap['G']  = 64;
+        keymap['B']  = 64;
+        keymap['H']  = 65;
+        keymap['N']  = 65;
+        keymap['U']  = 66;
+        keymap['J']  = 67;
+        keymap['M']  = 67;
+        keymap['I']  = 68;
+        keymap['K']  = 69;
+        keymap[VK_OEM_COMMA]  = 69;
+        keymap['O']  = 70;
+        keymap['L']  = 71;
+        keymap[VK_OEM_PERIOD]  = 71;
+        keymap[VK_OEM_1]  = 72; // ;:
+        keymap[VK_OEM_2]  = 72; // /?
+        keymap[VK_OEM_7] = 74; // '"
+        keymap[VK_OEM_4]  = 73; // [
+        keymap[VK_OEM_6]  = 75; // ]
+        keymap[VK_RETURN] = 76;
+        keymap[VK_OEM_5] = 77; // \|
+        keymap[VK_BACK] = 77;
+        keymap[0x31]  = 57;
+        keymap[0x32]  = 59;
+        keymap[0x33]  = 60;
+        keymap[0x34]  = 62;
+        keymap[0x35]  = 64;
+        keymap[0x36]  = 65;
+        keymap[0x37]  = 67;
+        keymap[0x38]  = 69;
+        keymap[0x39]  = 71;
+        keymap[0x30]  = 72;
+        keymap[VK_OEM_MINUS]  = 74;
+        keymap[VK_OEM_PLUS]  = 76;
+    }
+} _keymap_init;
+
 static LPWSTR keychars =
     L"~`\0" // F#3
     L"\x21c6Q\0" // G3
@@ -87,6 +142,10 @@ LRESULT MainWindow::OnCreate()
     GetClientRect(m_hwnd, &client);
 
     hFont = CreateFontIndirect(&ncmMetrics.lfMessageFont);
+
+    // For debugging
+    /*AllocConsole();
+    freopen("CONOUT$", "w", stdout);*/
 
     // Children
     m_volumeLabel = CreateWindow(WC_STATIC, L"Volume:",
@@ -170,7 +229,7 @@ LRESULT MainWindow::OnCreate()
     if (midiOutOpen(&m_midi, 0, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
         MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
 
-    memset(state, 0, 128 * sizeof(bool));
+    memset(active, 0, sizeof active);
     this->piano = PianoControl::Create(NULL, m_hwnd, KEYBOARD_IMAGE,
                                        WS_VISIBLE | WS_CHILD | WS_TABSTOP,
                                        0, 0, 0, 0);
@@ -187,56 +246,6 @@ LRESULT MainWindow::OnCreate()
         hBeep = NULL;
     }
     useBeep = false;
-    {
-        keymap[VK_OEM_3]  = 54; // `~ key
-        keymap['Q']  = 55;
-        keymap[VK_TAB] = 55;
-        keymap['A']  = 57;
-        keymap['Z']  = 57;
-        keymap['W']  = 56;
-        keymap['E']  = 58;
-        keymap['S']  = 59;
-        keymap['X']  = 59;
-        keymap['D']  = 60;
-        keymap['C']  = 60;
-        keymap['R']  = 61;
-        keymap['F']  = 62;
-        keymap['V']  = 62;
-        keymap['T']  = 63;
-        keymap['G']  = 64;
-        keymap['B']  = 64;
-        keymap['H']  = 65;
-        keymap['N']  = 65;
-        keymap['U']  = 66;
-        keymap['J']  = 67;
-        keymap['M']  = 67;
-        keymap['I']  = 68;
-        keymap['K']  = 69;
-        keymap[VK_OEM_COMMA]  = 69;
-        keymap['O']  = 70;
-        keymap['L']  = 71;
-        keymap[VK_OEM_PERIOD]  = 71;
-        keymap[VK_OEM_1]  = 72; // ;:
-        keymap[VK_OEM_2]  = 72; // /?
-        keymap[VK_OEM_7] = 74; // '"
-        keymap[VK_OEM_4]  = 73; // [
-        keymap[VK_OEM_6]  = 75; // ]
-        keymap[VK_RETURN] = 76;
-        keymap[VK_OEM_5] = 77; // \|
-        keymap[VK_BACK] = 77;
-        keymap[0x31]  = 57;
-        keymap[0x32]  = 59;
-        keymap[0x33]  = 60;
-        keymap[0x34]  = 62;
-        keymap[0x35]  = 64;
-        keymap[0x36]  = 65;
-        keymap[0x37]  = 67;
-        keymap[0x38]  = 69;
-        keymap[0x39]  = 71;
-        keymap[0x30]  = 72;
-        keymap[VK_OEM_MINUS]  = 74;
-        keymap[VK_OEM_PLUS]  = 76;
-    }
     m_keychars = NULL;
     PostMessage(m_hwnd, WM_INPUTLANGCHANGE, 0, 0);
     return 0;
@@ -334,28 +343,26 @@ int ModifyNote(int note, bool &half) {
     return note;
 }
 
-int GetMIDINote(WPARAM wCode, bool &half)
+int GetMIDINote(WPARAM wCode, bool &half, int &base)
 {
-    int note = keymap[wCode];
-    note = ModifyNote(note, half);
-    return note;
+    base = keymap[wCode];
+    return ModifyNote(base, half);
 }
 
 bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
 {
-    int note;
+    int base, note;
     bool half;
     WORD wCode = GetQWERTYKeyCode((WORD) wParam);
     if (wCode > 255 || !keymap[wCode] || (down && (lParam & 0x40000000)))
         return false;
 
-    note = GetMIDINote(wCode, half);
+    note = GetMIDINote(wCode, half, base);
+    if (active[base] != note)
+        PlayNote(active[base], false);
+    active[base] = down ? note : 0;
     PlayNote(note, down);
-    note -= 6;
-    if (half)
-        note += 12;
-    note %= 24;
-    piano->SetKeyStatus(note, down);
+    piano->SetKeyStatus((note + (half ? 6 : -6)) % 24, down);
     return true;
 }
 
@@ -368,14 +375,6 @@ void MainWindow::PlayNote(int note, bool down)
         midiTrackAddRest(m_midifile, 1, GetTickCount() - lastTime, TRUE);
         midiTrackAddMsg(m_midifile, 1, down ? msgNoteOn : msgNoteOff, note, m_force);
         lastTime = GetTickCount();
-    }
-
-    for (int i = note % 12; i < 0x7F; i += 12) {
-        if (i != note && state[i]) {
-            if (!useBeep) MIDI_MESSAGE(m_midi, 0x90, i, 0);
-            if (save)     midiTrackAddMsg(m_midifile, 1, msgNoteOff, i, 0);
-            state[i] = false;
-        }
     }
 
     if (useBeep) {
@@ -411,10 +410,8 @@ void MainWindow::PlayNote(int note, bool down)
                 hBeep = NULL;
             }
         }
-    } else {
+    } else
         MIDI_MESSAGE(m_midi, down ? 0x90 : 0x80, note, m_force);
-    }
-    state[note] = down;
 }
 
 
@@ -462,6 +459,29 @@ void MainWindow::OnReOpenMIDI()
 
 LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    switch (uMsg) {
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            switch (wParam) {
+                case VK_SHIFT:
+                case VK_CONTROL:
+                case VK_MENU:
+                    for (int i = 0; i < 128; ++i) {
+                        if (active[i]) {
+                            bool half;
+                            int note = ModifyNote(i, half);
+                            if (note != active[i]) {
+                                PlayNote(active[i], false);
+                                PlayNote(ModifyNote(i, half), true);
+                                active[i] = note;
+                            }
+                        }
+                    }
+                    return 0;
+            }
+    }
     switch (uMsg) {
     case WM_CREATE:
         return OnCreate();

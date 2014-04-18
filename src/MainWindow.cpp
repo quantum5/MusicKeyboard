@@ -157,7 +157,7 @@ LRESULT MainWindow::OnCreate()
     m_instruLabel = CreateWindow(WC_STATIC, L"Instrument:",
             WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
             m_hwnd, NULL, GetInstance(), NULL);
-    m_deviceLabel = CreateWindow(WC_STATIC, L"Instrument:",
+    m_deviceLabel = CreateWindow(WC_STATIC, L"Device:",
             WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
             m_hwnd, NULL, GetInstance(), NULL);
 

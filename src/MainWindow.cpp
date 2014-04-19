@@ -554,7 +554,8 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 currentDevice = SendMessage((HWND) lParam, CB_GETCURSEL, 0, 0);
                 midiOutClose(m_midi);
                 if (midiOutOpen(&m_midi, currentDevice, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
-                    MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR);
+                    return MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR), 0;
+                MIDI_MESSAGE(m_midi, 0xC0, m_instrument, 0);
                 return 0;
             }
             break;

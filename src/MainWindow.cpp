@@ -29,13 +29,12 @@ static char keymap[256];
 struct _keymap_init_class {
     _keymap_init_class() {
         memset(keymap, 0, sizeof keymap);
-        keymap[VK_OEM_3]  = 54; // `~ key
-        keymap['Q']  = 55;
-        keymap[VK_TAB] = 55;
+        keymap[VK_TAB] = 54;
+        keymap[VK_OEM_3]  = 55; // `~ key
+        keymap['Q']  = 56;
         keymap['A']  = 57;
         keymap['Z']  = 57;
-        keymap['W']  = 56;
-        keymap['E']  = 58;
+        keymap['W']  = 58;
         keymap['S']  = 59;
         keymap['X']  = 59;
         keymap['D']  = 60;
@@ -81,11 +80,11 @@ struct _keymap_init_class {
 } _keymap_init;
 
 static LPWSTR keychars =
-    L"~`\0" // F#3
-    L"\x21c6Q\0" // G3
-    L"W\0" // G#3
+    L"\x21c6\0" // F#3
+    L"\x21a5~`\0" // G3
+    L"Q\0" // G#3
     L"AZ1\0" // A3
-    L"E\0" // A#3
+    L"W\0" // A#3
     L"SX2\0" // B3
     L"DC3\0" // C4
     L"R\0" // C#4
@@ -363,6 +362,9 @@ int ModifyNote(int note, bool &half) {
         note += 48;
         half = false;
         break;
+    default:
+        half = false;
+        break;
     }
     return note;
 }
@@ -382,12 +384,16 @@ bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
         return false;
 
     note = GetMIDINote(wCode, half, base);
+    PlayKeyboardNote(note, half, base, down);
+    return true;
+}
+
+void MainWindow::PlayKeyboardNote(int note, bool half, int base, bool down) {
     if (active[base] != note)
         PlayNote(active[base], false);
     active[base] = down ? note : 0;
     PlayNote(note, down);
     piano->SetKeyStatus((note + (half ? 6 : -6)) % 24, down);
-    return true;
 }
 
 void MainWindow::PlayNote(int note, bool down)
@@ -479,6 +485,53 @@ void MainWindow::OnReOpenMIDI()
     midiFileSetTracksDefaultChannel(m_midifile, 1, MIDI_CHANNEL_1);
     midiTrackAddProgramChange(m_midifile, 1, m_instrument);
     midiSongAddSimpleTimeSig(m_midifile, 1, 4, MIDI_NOTE_CROCHET);
+}
+
+LRESULT CALLBACK MainWindow::LowLevelKeyboardHook(HHOOK hHook, int nCode, WPARAM wParam, LPARAM lParam) {
+    KBDLLHOOKSTRUCT* p = (KBDLLHOOKSTRUCT*) lParam;
+    if (p->vkCode == VK_CAPITAL) {
+        bool half, down;
+        int note = ModifyNote(55, half);
+        switch (wParam) {
+            case WM_KEYDOWN:
+            case WM_SYSKEYDOWN:
+                down = true;
+                break;
+            case WM_KEYUP:
+            case WM_SYSKEYUP:
+                down = false;
+                break;
+            default:
+                goto finish;
+        }
+        PlayKeyboardNote(note, half, 55, down);
+        return 1;
+    }
+    finish:
+    return CallNextHookEx(hHook, nCode, wParam, lParam);
+}
+
+MainWindow *MainWindow::activeHookWindow = NULL;
+HHOOK MainWindow::activeHook = NULL;
+
+LRESULT CALLBACK MainWindow::LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0 && activeHookWindow)
+        return activeHookWindow->LowLevelKeyboardHook(activeHook, nCode, wParam, lParam);
+    return CallNextHookEx(activeHook, nCode, wParam, lParam);
+}
+
+void MainWindow::HookWindow(MainWindow *window, DWORD dwThreadID) {
+    if (activeHook)
+        UnhookWindowsHookEx(activeHook);
+    activeHook = SetWindowsHookEx(WH_KEYBOARD_LL, MainWindow::LowLevelKeyboardProc, NULL, dwThreadID);
+    activeHookWindow = window;
+}
+
+void MainWindow::UnhookWindow(MainWindow *window) {
+    if (activeHookWindow == window) {
+        UnhookWindowsHookEx(activeHook);
+        activeHookWindow = NULL;
+    }
 }
 
 LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -632,6 +685,13 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         if (Play(wParam, lParam, false))
             return 0;
+        break;
+    case WM_ACTIVATE:
+        if (LOWORD(wParam)) {
+            HookWindow(this, 0);
+        } else {
+            UnhookWindow(this);
+        }
         break;
     case WM_LBUTTONDOWN:
         SetFocus(m_hwnd);

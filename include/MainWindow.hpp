@@ -46,6 +46,7 @@ protected:
     LRESULT OnCreate();
     LRESULT OnDestroy();
     bool Play(WPARAM wCode, LPARAM lParam, bool down);
+    void PlayKeyboardNote(int note, bool half, int base, bool down);
     BOOL WinRegisterClass(WNDCLASS *pwc);
     WORD GetQWERTYKeyCode(WORD wKeyCode);
     WORD GetRealKeyCode(WORD wQWERTYCode);
@@ -80,6 +81,13 @@ protected:
     MIDI_FILE *m_midifile;
     DWORD lastTime;
     bool saving;
+
+    LRESULT CALLBACK LowLevelKeyboardHook(HHOOK hHook, int nCode, WPARAM wParam, LPARAM lParam);
+    static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
+    static void HookWindow(MainWindow *window, DWORD dwThreadID);
+    static void UnhookWindow(MainWindow *window);
+    static MainWindow *activeHookWindow;
+    static HHOOK activeHook;
 private:
     HFONT hFont;
 };

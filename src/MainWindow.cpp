@@ -523,7 +523,7 @@ LRESULT CALLBACK MainWindow::LowLevelKeyboardProc(int nCode, WPARAM wParam, LPAR
 void MainWindow::HookWindow(MainWindow *window, DWORD dwThreadID) {
     if (activeHook)
         UnhookWindowsHookEx(activeHook);
-    activeHook = SetWindowsHookEx(WH_KEYBOARD_LL, MainWindow::LowLevelKeyboardProc, NULL, dwThreadID);
+    activeHook = SetWindowsHookEx(WH_KEYBOARD_LL, MainWindow::LowLevelKeyboardProc, GetModuleHandle(NULL), dwThreadID);
     activeHookWindow = window;
 }
 

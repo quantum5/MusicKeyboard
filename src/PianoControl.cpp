@@ -495,6 +495,15 @@ void PianoControl::OnPaint()
     EndPaint(m_hwnd, &ps);
 }
 
+void PianoControl::DisableDraw() {
+    SendMessage(m_hwnd, WM_SETREDRAW, FALSE, 0);
+}
+
+void PianoControl::EnableDraw() {
+    SendMessage(m_hwnd, WM_SETREDRAW, TRUE, 0);
+    RedrawWindow(m_hwnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE);
+}
+
 LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg) {

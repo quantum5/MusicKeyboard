@@ -35,7 +35,10 @@ public:
     
     virtual void SetKeyText(int key, LPCWSTR text);
     virtual LPCWSTR GetKeyText(int key);
-    
+
+    virtual void DisableDraw();
+    virtual void EnableDraw();
+
     virtual void SetBackground(HBRUSH background) { hBackground = background; }
     virtual HBRUSH GetBackground() { return hBackground; }
     

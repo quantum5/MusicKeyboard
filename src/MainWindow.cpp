@@ -103,7 +103,7 @@ static LPWSTR keychars =
     L"\"-\0" // D5
     L"]\0" // D#5
     L"=\x21b5\0" // E5
-    L"\x2190\0" // F5
+    L"\x2190\\\0" // F5
 ;
 
 static WORD frequency[] = {
@@ -740,9 +740,11 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
     case WM_ENTERSIZEMOVE:
         SetWindowLongPtr(m_hwnd, GWL_EXSTYLE, GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) | WS_EX_COMPOSITED);
+        piano->DisableDraw();
         return 0;
     case WM_EXITSIZEMOVE:
         SetWindowLongPtr(m_hwnd, GWL_EXSTYLE, GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+        piano->EnableDraw();
         return 0;
     case MMWM_NOTEID: {
         int note = wParam + 54;

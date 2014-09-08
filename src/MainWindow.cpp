@@ -266,7 +266,7 @@ LRESULT MainWindow::OnCreate()
         F_RtlInitUnicodeString(&usBeepDevice, L"\\Device\\Beep");
         hBeep = NULL;
     }
-    useBeep = false;
+    capsDown = useBeep = false;
     m_keychars = NULL;
     PostMessage(m_hwnd, WM_INPUTLANGCHANGE, 0, 0);
     return 0;
@@ -496,10 +496,15 @@ LRESULT CALLBACK MainWindow::LowLevelKeyboardHook(HHOOK hHook, int nCode, WPARAM
             case WM_KEYDOWN:
             case WM_SYSKEYDOWN:
                 down = true;
+                if (capsDown)
+                    goto finish;
+                else
+                    capsDown = true;
                 break;
             case WM_KEYUP:
             case WM_SYSKEYUP:
                 down = false;
+                capsDown = false;
                 break;
             default:
                 goto finish;

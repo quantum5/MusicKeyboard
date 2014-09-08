@@ -56,6 +56,7 @@ protected:
     virtual HICON GetIcon();
 
     int active[128];
+    bool capsDown;
     bool useBeep;
     HANDLE hBeep;
     unsigned lastFrequency;

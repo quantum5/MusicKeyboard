@@ -1,5 +1,6 @@
 #include <MainWindow.hpp>
 
+#include <math.h>
 #include <resource.h>
 #include <commctrl.h>
 #include <commdlg.h>
@@ -118,6 +119,10 @@ static WORD frequency[] = {
     7902, 8372, 8870, 9397, 9956, 10548, 11175, 11840, 12544
 };
 
+static LPCWSTR majorKeys[] = {
+    L"C", L"C#/Db", L"D", L"D#/Eb", L"E", L"F", L"F#/Gb", L"G", L"G#/Ab", L"A", L"A#/Bb", L"B"
+};
+
 int dnslen(LPWSTR dns)
 {
     LPWSTR i = dns;
@@ -159,6 +164,18 @@ LRESULT MainWindow::OnCreate()
     m_deviceLabel = CreateWindow(WC_STATIC, L"Device:",
             WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
             m_hwnd, NULL, GetInstance(), NULL);
+    m_adjustLabel = CreateWindow(WC_STATIC, L"Adjustment:",
+            WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
+            m_hwnd, NULL, GetInstance(), NULL);
+    m_semitoneLabel = CreateWindow(WC_STATIC, L"semitones",
+            WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
+            m_hwnd, NULL, GetInstance(), NULL);
+    m_octaveLabel = CreateWindow(WC_STATIC, L"octaves",
+            WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
+            m_hwnd, NULL, GetInstance(), NULL);
+    m_keyLabel = CreateWindow(WC_STATIC, L"Key of:",
+            WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 0, 0, 0, 0,
+            m_hwnd, NULL, GetInstance(), NULL);
 
     m_instruSelect = CreateWindow(WC_COMBOBOX, NULL, WS_CHILD | WS_VISIBLE |
             CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP,
@@ -173,6 +190,24 @@ LRESULT MainWindow::OnCreate()
     m_deviceSelect = CreateWindow(WC_COMBOBOX, NULL,
             WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_DEVICE, GetInstance(), NULL);
+
+    m_semitoneSelect = CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, NULL,
+            WS_CHILDWINDOW | WS_VISIBLE | ES_NUMBER | ES_LEFT,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_SEMITONE, GetInstance(), NULL);
+    m_semitoneUpDown = CreateWindow(UPDOWN_CLASS, NULL,
+            WS_CHILDWINDOW | WS_VISIBLE | UDS_AUTOBUDDY | UDS_SETBUDDYINT |
+                UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_HOTTRACK,
+            0, 0, 0, 0, m_hwnd, NULL, GetInstance(), NULL);
+    m_octaveSelect = CreateWindowEx(WS_EX_CLIENTEDGE, WC_EDIT, NULL,
+            WS_CHILDWINDOW | WS_VISIBLE | ES_NUMBER | ES_LEFT,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_OCTAVE, GetInstance(), NULL);
+    m_octaveUpDown = CreateWindow(UPDOWN_CLASS, NULL,
+            WS_CHILDWINDOW | WS_VISIBLE | UDS_AUTOBUDDY | UDS_SETBUDDYINT |
+                UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_HOTTRACK,
+            0, 0, 0, 0, m_hwnd, NULL, GetInstance(), NULL);
+    m_keySelect = CreateWindow(WC_COMBOBOX, NULL,
+            WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_KEY, GetInstance(), NULL);
 
     m_saveCheck = CreateWindow(WC_BUTTON, L"&Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_SAVE, GetInstance(), NULL);
@@ -197,10 +232,17 @@ LRESULT MainWindow::OnCreate()
     SendMessage(m_forceBar, TBM_SETRANGE, FALSE, 127 << 16);
     SendMessage(m_volumeBar, TBM_SETPOS, FALSE, 0xFFFF);
     SendMessage(m_forceBar, TBM_SETPOS, FALSE, 64);
+
+    SendMessage(m_semitoneUpDown, UDM_SETRANGE32, (WPARAM) -36, 48);
+    SendMessage(m_semitoneUpDown, UDM_SETPOS32, 0, 0);
+    SendMessage(m_octaveUpDown, UDM_SETRANGE32, (WPARAM) -3, 3);
+    SendMessage(m_octaveUpDown, UDM_SETPOS32, 0, 0);
+
     m_force = 64;
     m_volume = 0xFFFF;
     m_midifile = NULL;
     m_instrument = 0;
+    m_adjust = 0;
     saving = false;
     lastTime = (DWORD) -1;
 
@@ -213,6 +255,13 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_instruSelect);
     SETFONT(m_deviceLabel);
     SETFONT(m_deviceSelect);
+    SETFONT(m_adjustLabel);
+    SETFONT(m_semitoneSelect);
+    SETFONT(m_semitoneLabel);
+    SETFONT(m_octaveSelect);
+    SETFONT(m_octaveLabel);
+    SETFONT(m_keySelect);
+    SETFONT(m_keyLabel);
     SETFONT(m_beepCheck);
     SETFONT(m_saveCheck);
     SETFONT(m_saveLabel);
@@ -221,6 +270,10 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_reopen);
 #undef SETFONT
 
+    SendMessage(m_keySelect, CB_INITSTORAGE, 12, 128);
+    for (int i = 0; i < 12; ++i)
+        SendMessage(m_keySelect, CB_ADDSTRING, 0, (LPARAM) majorKeys[i]);
+    SendMessage(m_keySelect, CB_SETCURSEL, 0, 0);
     {
         WCHAR buf[MAX_PATH];
         int piano;
@@ -266,7 +319,7 @@ LRESULT MainWindow::OnCreate()
         F_RtlInitUnicodeString(&usBeepDevice, L"\\Device\\Beep");
         hBeep = NULL;
     }
-    capsDown = useBeep = false;
+    capsDown = useBeep = adjusting = false;
     m_keychars = NULL;
     PostMessage(m_hwnd, WM_INPUTLANGCHANGE, 0, 0);
     return 0;
@@ -274,20 +327,6 @@ LRESULT MainWindow::OnCreate()
 
 LRESULT MainWindow::OnDestroy()
 {
-    DestroyWindow(m_volumeLabel);
-    DestroyWindow(m_volumeBar);
-    DestroyWindow(m_forceLabel);
-    DestroyWindow(m_forceBar);
-    DestroyWindow(m_instruLabel);
-    DestroyWindow(m_instruSelect);
-    DestroyWindow(m_deviceLabel);
-    DestroyWindow(m_deviceSelect);
-    DestroyWindow(m_beepCheck);
-    DestroyWindow(m_saveCheck);
-    DestroyWindow(m_saveLabel);
-    DestroyWindow(m_saveFile);
-    DestroyWindow(m_saveBrowse);
-    DestroyWindow(m_reopen);
     midiOutClose(m_midi);
     if (m_midifile)
         midiFileClose(m_midifile);
@@ -327,7 +366,7 @@ WORD MainWindow::GetRealKeyCode(WORD wQWERTYCode)
         return wQWERTYCode;
 }
 
-int ModifyNote(int note, bool &half) {
+int MainWindow::ModifyNote(int note, bool &half) {
     int state = 0;
     
     if (GetKeyState(VK_CONTROL) < 0)
@@ -366,10 +405,10 @@ int ModifyNote(int note, bool &half) {
         half = false;
         break;
     }
-    return note;
+    return clamp(note + m_adjust, 0, 127);
 }
 
-int GetMIDINote(WPARAM wCode, bool &half, int &base)
+int MainWindow::GetMIDINote(WPARAM wCode, bool &half, int &base)
 {
     base = keymap[wCode];
     return ModifyNote(base, half);
@@ -393,7 +432,7 @@ void MainWindow::PlayKeyboardNote(int note, bool half, int base, bool down) {
         PlayNote(active[base], false);
     active[base] = down ? note : 0;
     PlayNote(note, down);
-    piano->SetKeyStatus((note + (half ? 6 : -6)) % 24, down);
+    piano->SetKeyStatus(((note + (half ? 6 : -6) - m_adjust) % 24 + 24) % 24, down);
 }
 
 void MainWindow::PlayNote(int note, bool down)
@@ -519,24 +558,33 @@ LRESULT CALLBACK MainWindow::LowLevelKeyboardHook(HHOOK hHook, int nCode, WPARAM
 MainWindow *MainWindow::activeHookWindow = NULL;
 HHOOK MainWindow::activeHook = NULL;
 
-LRESULT CALLBACK MainWindow::LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK MainWindow::LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
     if (nCode >= 0 && activeHookWindow)
         return activeHookWindow->LowLevelKeyboardHook(activeHook, nCode, wParam, lParam);
     return CallNextHookEx(activeHook, nCode, wParam, lParam);
 }
 
-void MainWindow::HookWindow(MainWindow *window, DWORD dwThreadID) {
+void MainWindow::HookWindow(MainWindow *window, DWORD dwThreadID)
+{
     if (activeHook)
         UnhookWindowsHookEx(activeHook);
     activeHook = SetWindowsHookEx(WH_KEYBOARD_LL, MainWindow::LowLevelKeyboardProc, GetModuleHandle(NULL), dwThreadID);
     activeHookWindow = window;
 }
 
-void MainWindow::UnhookWindow(MainWindow *window) {
+void MainWindow::UnhookWindow(MainWindow *window)
+{
     if (activeHookWindow == window) {
         UnhookWindowsHookEx(activeHook);
         activeHookWindow = NULL;
     }
+}
+
+void MainWindow::OnAdjust()
+{
+    m_adjust = clamp((int) GetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, NULL, TRUE), -36, 48);
+    //if (!useBeep) MIDI_MESSAGE(m_midi, 0xB0, 122, 0);
 }
 
 LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -578,15 +626,24 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         GetClientRect(m_hwnd, &client);
 #define REPOS(hwnd, k) hdwp = DeferWindowPos(hdwp, hwnd, 0, k, SWP_NOACTIVATE|SWP_NOZORDER)
         hdwp = BeginDeferWindowPos(14);
-        REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 202));
-        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 157, 70, 25));
-        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 157, client.right - 94, 25));
-        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 127, 70, 25));
-        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 127, client.right - 94, 25));
-        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 97, 70, 25));
-        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 97, client.right - 94, 25));
-        REPOS(m_deviceLabel,    BOTTOM(12, client.bottom - 67, 70, 25));
-        REPOS(m_deviceSelect,   BOTTOM(82, client.bottom - 67, client.right - 94, 25));
+        REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 232));
+        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 187, 70, 25));
+        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 187, client.right - 94, 25));
+        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 157, 70, 25));
+        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 157, client.right - 94, 25));
+        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 127, 70, 25));
+        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 127, client.right - 94, 25));
+        REPOS(m_deviceLabel,    BOTTOM(12, client.bottom - 97, 70, 25));
+        REPOS(m_deviceSelect,   BOTTOM(82, client.bottom - 97, client.right - 94, 25));
+        REPOS(m_adjustLabel,    BOTTOM(12, client.bottom - 67, 70, 25));
+        REPOS(m_semitoneSelect, BOTTOM(82, client.bottom - 67, 50, 20));
+        REPOS(m_semitoneUpDown, BOTTOM(132, client.bottom - 67, 18, 20));
+        REPOS(m_semitoneLabel,  BOTTOM(155, client.bottom - 67, 60, 20));
+        REPOS(m_octaveSelect,   BOTTOM(220, client.bottom - 67, 50, 20));
+        REPOS(m_octaveUpDown,   BOTTOM(270, client.bottom - 67, 18, 20));
+        REPOS(m_octaveLabel,    BOTTOM(293, client.bottom - 67, 50, 20));
+        REPOS(m_keyLabel,       BOTTOM(345, client.bottom - 67, 45, 20));
+        REPOS(m_keySelect,      BOTTOM(390, client.bottom - 67, 65, 22));
         REPOS(m_saveCheck,      BOTTOM(22, client.bottom - 42, 50, 20));
         REPOS(m_saveLabel,      BOTTOM(27, client.bottom - 19, 30, 20));
         REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 249, 25));
@@ -615,6 +672,16 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     return MessageBox(m_hwnd, L"Failed to open MIDI device!", L"Fatal Error", MB_ICONERROR), 0;
                 MIDI_MESSAGE(m_midi, 0xC0, m_instrument, 0);
                 return 0;
+            case KEYBOARD_KEY:
+                if (!adjusting) {
+                    adjusting = true;
+                    SetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE,
+                        (int) GetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, NULL, TRUE) * 12
+                        + SendMessage((HWND) lParam, CB_GETCURSEL, 0, 0), TRUE);
+                    OnAdjust();
+                    adjusting = false;
+                }
+                break;
             }
             break;
         case BN_CLICKED:
@@ -659,10 +726,35 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             }
             break;
         case EN_CHANGE:
-            if (LOWORD(wParam) == KEYBOARD_SAVE_FILE &&
-                    IsDlgButtonChecked(m_hwnd, KEYBOARD_SAVE) &&
+            switch (LOWORD(wParam))
+            case KEYBOARD_OCTAVE: {
+                if (!adjusting) {
+                    int octave = clamp((int) GetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, NULL, TRUE), -3, 3);
+                    int semitones = octave * 12 + SendMessage(m_keySelect, CB_GETCURSEL, 0, 0);
+                    adjusting = true;
+                    SetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, octave, TRUE);
+                    SetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, semitones, TRUE);
+                    OnAdjust();
+                    adjusting = false;
+                }
+                break;
+            case KEYBOARD_SEMITONE:
+                if (!adjusting) {
+                    int semitones = clamp((int) GetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, NULL, TRUE), -36, 48);
+                    adjusting = true;
+                    SetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, semitones, TRUE);
+                    SetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, (WPARAM) floor(semitones / 12.0), TRUE);
+                    SendMessage(m_keySelect, CB_SETCURSEL, (semitones % 12 + 12) % 12, 0);
+                    OnAdjust();
+                    adjusting = false;
+                }
+                break;
+            case KEYBOARD_SAVE_FILE:
+                if (IsDlgButtonChecked(m_hwnd, KEYBOARD_SAVE) &&
                     Edit_GetTextLength(m_saveFile) > 0)
-                EnableWindow(m_reopen, TRUE);
+                        EnableWindow(m_reopen, TRUE);
+                break;
+            }
         }
         break;
     case WM_HSCROLL:
@@ -691,7 +783,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         if (Play(wParam, lParam, false))
             return 0;
         break;
-    case WM_ACTIVATE:
+    case WM_NCACTIVATE:
         if (LOWORD(wParam)) {
             HookWindow(this, 0);
         } else {
@@ -767,7 +859,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 MainWindow *MainWindow::Create(LPCTSTR szTitle)
 {
     MainWindow *self = new MainWindow();
-    RECT client = {0, 0, 622, 371};
+    RECT client = {0, 0, 622, 401};
     AdjustWindowRect(&client, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE);
     if (self &&
         self->WinCreateWindow(0,

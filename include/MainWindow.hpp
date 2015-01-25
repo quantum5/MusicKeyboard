@@ -30,11 +30,19 @@
 #define KEYBOARD_FORCE      0xAA02
 #define KEYBOARD_INSTRUMENT 0xAA03
 #define KEYBOARD_DEVICE     0xAA04
+#define KEYBOARD_SEMITONE   0xAA05
+#define KEYBOARD_OCTAVE     0xAA06
+#define KEYBOARD_KEY        0xAA07
 #define KEYBOARD_USE_BEEP   0xAAFF
 #define KEYBOARD_SAVE       0xAB00
 #define KEYBOARD_SAVE_FILE  0xAB01
 #define KEYBOARD_BROWSE     0xAB02
 #define KEYBOARD_REOPEN     0xAB03
+
+template<class T>
+T clamp(T v, T a, T b) {
+    return v < a ? a : (v > b ? b : v);
+}
 
 class MainWindow : public Window {
 public:
@@ -52,7 +60,10 @@ protected:
     WORD GetRealKeyCode(WORD wQWERTYCode);
     virtual void PaintContent(PAINTSTRUCT *pps);
     void OnReOpenMIDI();
+    void OnAdjust();
 
+    int GetMIDINote(WPARAM wCode, bool &half, int &base);
+    int ModifyNote(int note, bool &half);
     virtual HICON GetIcon();
 
     int active[128];
@@ -71,9 +82,13 @@ protected:
     HWND m_forceLabel, m_forceBar;
     HWND m_instruLabel, m_instruSelect;
     HWND m_deviceLabel, m_deviceSelect;
+    HWND m_adjustLabel, m_semitoneSelect, m_semitoneUpDown, m_semitoneLabel;
+    HWND m_octaveSelect, m_octaveUpDown, m_octaveLabel;
+    HWND m_keyLabel, m_keySelect;
+    bool adjusting;
     HWND m_beepCheck;
     HWND m_saveCheck, m_saveLabel, m_saveFile, m_saveBrowse, m_reopen;
-    int m_instrument, m_volume, m_force;
+    int m_instrument, m_volume, m_force, m_adjust;
     HMIDIOUT m_midi;
     bool isQWERTY;
     HKL hklQWERTY;

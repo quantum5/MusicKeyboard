@@ -233,7 +233,7 @@ LRESULT MainWindow::OnCreate()
     SendMessage(m_volumeBar, TBM_SETPOS, FALSE, 0xFFFF);
     SendMessage(m_forceBar, TBM_SETPOS, FALSE, 64);
 
-    SendMessage(m_semitoneUpDown, UDM_SETRANGE32, (WPARAM) -36, 48);
+    SendMessage(m_semitoneUpDown, UDM_SETRANGE32, (WPARAM) -36, 47);
     SendMessage(m_semitoneUpDown, UDM_SETPOS32, 0, 0);
     SendMessage(m_octaveUpDown, UDM_SETRANGE32, (WPARAM) -3, 3);
     SendMessage(m_octaveUpDown, UDM_SETPOS32, 0, 0);
@@ -729,10 +729,12 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             switch (LOWORD(wParam))
             case KEYBOARD_OCTAVE: {
                 if (!adjusting) {
-                    int octave = clamp((int) GetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, NULL, TRUE), -3, 3);
+                    int o = GetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, NULL, TRUE);
+                    int octave = clamp(o, -3, 3);
                     int semitones = octave * 12 + SendMessage(m_keySelect, CB_GETCURSEL, 0, 0);
                     adjusting = true;
-                    SetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, octave, TRUE);
+                    if (o != octave)
+                        SetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, octave, TRUE);
                     SetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, semitones, TRUE);
                     OnAdjust();
                     adjusting = false;
@@ -740,9 +742,11 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 break;
             case KEYBOARD_SEMITONE:
                 if (!adjusting) {
-                    int semitones = clamp((int) GetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, NULL, TRUE), -36, 48);
+                    int s = GetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, NULL, TRUE);
+                    int semitones = clamp(s, -36, 47);
                     adjusting = true;
-                    SetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, semitones, TRUE);
+                    if (s != semitones)
+                        SetDlgItemInt(m_hwnd, KEYBOARD_SEMITONE, semitones, TRUE);
                     SetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, (WPARAM) floor(semitones / 12.0), TRUE);
                     SendMessage(m_keySelect, CB_SETCURSEL, (semitones % 12 + 12) % 12, 0);
                     OnAdjust();

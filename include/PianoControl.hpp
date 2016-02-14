@@ -8,6 +8,14 @@
 #include <commctrl.h>
 #include <shellapi.h>
 
+#ifndef WM_TOUCH
+    // Because MinGW needs it.
+    #define TWF_WANTPALM 0x00000002
+    #define WM_TOUCH 0x0240
+    #define MICROSOFT_TABLETPENSERVICE_PROPERTY TEXT("MicrosoftTabletPenServiceProperty")
+    #define TOUCH_COORD_TO_PIXEL(l) ((l) / 100)
+#endif
+
 typedef BOOL (WINAPI *T_GetTouchInputInfo)(HTOUCHINPUT hTouchInput, UINT cInputs, PTOUCHINPUT pInputs, int cbSize);
 typedef BOOL (WINAPI *T_CloseTouchInputHandle)(HTOUCHINPUT hTouchInput);
 typedef BOOL (WINAPI *T_RegisterTouchWindow)(HWND hWnd, ULONG ulFlags);

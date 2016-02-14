@@ -4,10 +4,15 @@
 #include <windowsx.h>
 #include <stdio.h>
 
+#include <tchar.h>
+#include <tpcshrd.h>
+
 #ifndef max
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
+
+#define MOUSEEVENTF_FROMTOUCH 0xFF515700
 
 BOOL PianoControl::WinRegisterClass(WNDCLASS *pwc)
 {
@@ -24,16 +29,48 @@ LRESULT PianoControl::OnCreate()
 
     hFont = CreateFontIndirect(&ncmMetrics.lfMessageFont);
     hwParent = GetParent(m_hwnd);
-    
+
     hMemDC = NULL;
     hMemBitmap = NULL;
     bmx = bmy = 0;
-    
+
     blackStatus = whiteStatus = NULL;
     blackText = whiteText = NULL;
     mouseDown = false;
     lastNote = lastKey = 0;
-    
+
+    int touchSupport = GetSystemMetrics(SM_DIGITIZER);
+    T_RegisterTouchWindow F_RegisterTouchWindow = NULL;
+    hasTouch = false;
+
+    if (touchSupport & NID_READY) {
+        // Has touch
+        hasTouch = true;
+
+        F_GetTouchInputInfo = (T_GetTouchInputInfo) GetProcAddress(GetModuleHandle(TEXT("user32")), "GetTouchInputInfo");
+        F_CloseTouchInputHandle = (T_CloseTouchInputHandle) GetProcAddress(GetModuleHandle(TEXT("user32")), "CloseTouchInputHandle");
+        F_RegisterTouchWindow = (T_RegisterTouchWindow) GetProcAddress(GetModuleHandle(TEXT("user32")), "RegisterTouchWindow");
+        if (!F_GetTouchInputInfo || !F_CloseTouchInputHandle || !F_RegisterTouchWindow)
+            hasTouch = false;
+    }
+
+    if (hasTouch) {
+        F_RegisterTouchWindow(m_hwnd, TWF_WANTPALM);
+        memset(touchPoint, 0, MAXPOINTS * sizeof(PianoTouchPoint));
+
+        ATOM atom = GlobalAddAtom(MICROSOFT_TABLETPENSERVICE_PROPERTY);
+        SetProp(m_hwnd, MICROSOFT_TABLETPENSERVICE_PROPERTY, (HANDLE) (
+            TABLET_DISABLE_PRESSANDHOLD | // disables press and hold (right-click) gesture
+            TABLET_DISABLE_PENTAPFEEDBACK | // disables UI feedback on pen up (waves)
+            TABLET_DISABLE_PENBARRELFEEDBACK | // disables UI feedback on pen button down
+            TABLET_DISABLE_FLICKS // disables pen flicks (back, forward, drag down, drag up)
+        ));
+        GlobalDeleteAtom(atom);
+    }
+
+    for (int i = 0; i < MAXPOINTS; ++i)
+        touchPointID[i] = (DWORD) -1;
+
     SetOctaves(2);
     return 0;
 }
@@ -49,7 +86,7 @@ void PianoControl::SetOctaves(int octaves)
 {
     bool *newBlackStatus, *newWhiteStatus;
     LPCWSTR *newBlackText, *newWhiteText;
-    
+
     #define RENEW(type, newname, store) {\
         newname = new type[7 * octaves];\
         if (store) {\
@@ -63,7 +100,7 @@ void PianoControl::SetOctaves(int octaves)
     RENEW(bool, newWhiteStatus, whiteStatus);
     RENEW(LPCWSTR, newBlackText, blackText);
     RENEW(LPCWSTR, newWhiteText, whiteText);
-    
+
     this->octaves = octaves;
 }
 
@@ -80,7 +117,7 @@ void PianoControl::UpdateKey(int key, bool black)
     bwidth = width / 12 / octaves; // smaller
     bheight = height / 2;
     hbwidth = bwidth / 2;
-    
+
     if (black) {
         client.left += (key * wwidth) - hbwidth + 2;
         client.right = client.left + bwidth - 5;
@@ -98,7 +135,7 @@ void PianoControl::SetKeyStatus(int key, bool down)
 {
     bool black;
     int id = keyIDToInternal(key, black);
-    
+
     (black ? blackStatus : whiteStatus)[id] = down;
     UpdateKey(id, black);
 }
@@ -107,7 +144,7 @@ bool PianoControl::GetKeyStatus(int key)
 {
     bool black;
     int id = keyIDToInternal(key, black);
-    
+
     return (black ? blackStatus : whiteStatus)[id];
 }
 
@@ -115,7 +152,7 @@ void PianoControl::SetKeyText(int key, LPCWSTR text)
 {
     bool black;
     int id = keyIDToInternal(key, black);
-    
+
     (black ? blackText : whiteText)[id] = text;
     UpdateKey(id, black);
 }
@@ -124,7 +161,7 @@ LPCWSTR PianoControl::GetKeyText(int key)
 {
     bool black;
     int id = keyIDToInternal(key, black);
-    
+
     return (black ? blackText : whiteText)[id];
 }
 
@@ -140,7 +177,7 @@ int PianoControl::keyIDToInternal(int id, bool &black) {
         default:
             black = false;
     }
-    
+
     int ret = 0;
     switch (id % 12) {
         case 0:
@@ -170,7 +207,7 @@ int PianoControl::keyIDToInternal(int id, bool &black) {
             ret = 6;
             break;
     }
-    
+
     return id / 12 * 7 + ret;
 }
 
@@ -224,7 +261,7 @@ int PianoControl::hitTest(int x, int y, bool &black)
     RECT client;
     int width, height;
     int wwidth, bwidth, bheight, hbwidth;
-    
+
     GetClientRect(m_hwnd, &client);
     width = client.right - client.left;
     height = client.bottom - client.top;
@@ -233,10 +270,10 @@ int PianoControl::hitTest(int x, int y, bool &black)
     bheight = height / 2;
     bheight = height / 2;
     hbwidth = bwidth / 2;
-    
+
     int key = x / wwidth;
     int dx = x % wwidth;
-    
+
     if (y < bheight && (dx < hbwidth || dx > (wwidth - hbwidth))) {
         int temp = key;
         if (dx >= hbwidth)
@@ -251,7 +288,7 @@ int PianoControl::hitTest(int x, int y, bool &black)
                 return temp;
         }
     }
-    
+
     black = false;
     return key;
 }
@@ -280,10 +317,10 @@ void PianoControl::PaintContent(PAINTSTRUCT *pps)
     bheight = height / 2;
     bheight = height / 2;
     hbwidth = bwidth / 2;
-    
+
     hbOriginal = SelectBrush(hdc, hBackground);
     hPenOriginal = SelectPen(hdc, hPenDC);
-    
+
     GetObject(hFont, sizeof(LOGFONT), &lf);
     lf.lfWidth = 0;
     lf.lfHeight = min(bwidth, bheight / 4);
@@ -333,18 +370,18 @@ void PianoControl::PaintContent(PAINTSTRUCT *pps)
     #define GETBORDER0(down) (down ? GetSysColor(COLOR_3DLIGHT) : RGB(0, 0, 0))
     #define GETBORDER1(down) (down ? GetSysColor(COLOR_3DSHADOW) : GetSysColor(COLOR_3DDKSHADOW))
     #define GETBORDER2(down) (down ? GetSysColor(COLOR_3DDKSHADOW) : GetSysColor(COLOR_3DSHADOW))
-    
+
     rect.top = height - CURVE_SIZE, rect.bottom = height;
     rect.left = client.left, rect.right = client.right;
     FillRect(hdc, &rect, hBackground);
-    
+
     rect.top = client.top, rect.bottom = client.bottom;
     rect.left = client.right - width % (7 * octaves), rect.right = client.right;
     FillRect(hdc, &rect, hBackground);
     for (int i = 0; i < 7 * octaves; ++i) {
         int sx = i * wwidth, ex = i * wwidth + wwidth - 1;
         bool down = whiteStatus[i];
-        
+
         SelectBrush(hdc, hbDC);
         SetDCBrushColor(hdc, GETBORDER1(down));
         DRAWBOX(bheight, 0, height, GETBORDER0(down));
@@ -352,10 +389,10 @@ void PianoControl::PaintContent(PAINTSTRUCT *pps)
         DRAWBOX(bheight, 1, height, GETBORDER1(down));
         SelectBrush(hdc, hbFace);
         DRAWBOX(bheight, 2, height, GETBORDER2(down));
-        
+
         rect.top = 0, rect.bottom = bheight, rect.left = sx, rect.right = ex;
         FillRect(hdc, &rect, hBackground);
-        
+
         switch (haveBlack(i)) {
             case 0: // none
                 DRAWBORDER(bheight, 0, GETBORDER0(down));
@@ -405,7 +442,7 @@ void PianoControl::PaintContent(PAINTSTRUCT *pps)
                 FillRect(hdc, &rect, hbFace);
                 break;
         }
-        
+
         if (whiteText[i]) {
             INITIALIZE_PAINT_TEXT(whiteText);
             rect.top = bheight + bheight / 7, rect.bottom = height - bheight / 7;
@@ -413,7 +450,7 @@ void PianoControl::PaintContent(PAINTSTRUCT *pps)
             SetTextColor(hdc, RGB(0, 0, 0));
             DrawText(hdc, szBuffer, -1, &rect, DT_CENTER);
         }
-        
+
         rect.top = client.top, rect.bottom = client.bottom;
         rect.left = ex, rect.right = ex + 1;
         FillRect(hdc, &rect, hBackground);
@@ -431,7 +468,7 @@ void PianoControl::PaintContent(PAINTSTRUCT *pps)
             SetDCBrushColor(hdc, colour);
             DRAWBOX(-CURVE_SIZE, j, bheight - 2, colour);
         }
-        
+
         if (blackText[i]) {
             INITIALIZE_PAINT_TEXT(blackText);
             rect.top = bheight / 7, rect.bottom = bheight - bheight / 7;
@@ -462,13 +499,13 @@ void PianoControl::OnPaint()
 {
     PAINTSTRUCT ps;
     BeginPaint(m_hwnd, &ps);
-    
+
     int x = ps.rcPaint.left;
     int y = ps.rcPaint.top;
     int cx = ps.rcPaint.right - ps.rcPaint.left;
     int cy = ps.rcPaint.bottom - ps.rcPaint.top;
     HDC hdc = ps.hdc;
-    
+
     if (!hMemDC)
         hMemDC = CreateCompatibleDC(hdc);
     if (!hMemBitmap || cx > bmx || cy > bmy) {
@@ -481,7 +518,7 @@ void PianoControl::OnPaint()
     }
     if (hMemDC && hMemBitmap) {
         ps.hdc = hMemDC;
-        
+
         HBITMAP hbmPrev = SelectBitmap(hMemDC, hMemBitmap);
         SetWindowOrgEx(hMemDC, x, y, NULL);
 
@@ -495,13 +532,70 @@ void PianoControl::OnPaint()
     EndPaint(m_hwnd, &ps);
 }
 
-void PianoControl::DisableDraw() {
+void PianoControl::DisableDraw()
+{
     SendMessage(m_hwnd, WM_SETREDRAW, FALSE, 0);
 }
 
-void PianoControl::EnableDraw() {
+void PianoControl::EnableDraw()
+{
     SendMessage(m_hwnd, WM_SETREDRAW, TRUE, 0);
     RedrawWindow(m_hwnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE);
+}
+
+void PianoControl::OnTouchPoint(UINT id, int x, int y)
+{
+    if (x != -1 && y != -1) {
+        // Touch point is down
+        if (touchPoint[id].down) {
+            // Dragged
+            bool black;
+            int internal = hitTest(x, y, black);
+            int key = internalToKeyID(internal, black);
+            int external = SendMessage(hwParent, MMWM_NOTEID, key, 0);
+            if (touchPoint[id].lastNote != external) {
+                SendMessage(hwParent, MMWM_TURNNOTE, touchPoint[id].lastNote, 0);
+                SetKeyStatus(touchPoint[id].lastKey, false);
+                SendMessage(hwParent, MMWM_TURNNOTE, external, 1);
+                SetKeyStatus(key, true);
+                touchPoint[id].lastNote = external;
+                touchPoint[id].lastKey = key;
+            }
+        } else {
+            // Pressed
+            bool black;
+            int internal = hitTest(x, y, black);
+            int key = internalToKeyID(internal, black);
+            int external = SendMessage(hwParent, MMWM_NOTEID, key, 0);
+            SendMessage(hwParent, MMWM_TURNNOTE, external, 1);
+            SetKeyStatus(key, true);
+            touchPoint[id].lastNote = external;
+            touchPoint[id].lastKey = key;
+            touchPoint[id].down = true;
+        }
+        touchPoint[id].point.x = x;
+        touchPoint[id].point.y = y;
+    } else {
+        // It just went up
+        SendMessage(hwParent, MMWM_TURNNOTE, touchPoint[id].lastNote, 0);
+        SetKeyStatus(touchPoint[id].lastKey, false);
+        touchPoint[id].down = false;
+    }
+}
+
+int PianoControl::GetTouchPointID(DWORD dwID)
+{
+    for (DWORD i = 0; i < MAXPOINTS; ++i) {
+        if (touchPointID[i] == dwID)
+            return i;
+    }
+    for (DWORD i = 0; i < MAXPOINTS; ++i) {
+        if (touchPointID[i] == (DWORD) -1) {
+            touchPointID[i] = dwID;
+            return i;
+        }
+    }
+    return -1;
 }
 
 LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -520,27 +614,29 @@ LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_SIZE:
         InvalidateRect(m_hwnd, NULL, TRUE);
         return 0;
-    case WM_LBUTTONDOWN: {
-        bool black;
-        int internal = hitTest(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), black);
-        int key = internalToKeyID(internal, black);
-        int external = SendMessage(hwParent, MMWM_NOTEID, key, 0);
-        SendMessage(hwParent, MMWM_TURNNOTE, external, 1);
-        SetKeyStatus(key, true);
-        lastNote = external;
-        lastKey = key;
-        mouseDown = true;
-        SetFocus(m_hwnd);
-        return 0;
-    }
-    case WM_LBUTTONUP: {
-        SendMessage(hwParent, MMWM_TURNNOTE, lastNote, 0);
-        SetKeyStatus(lastKey, false);
-        mouseDown = false;
-        return 0;
-    }
+    case WM_LBUTTONDOWN:
+        if ((GetMessageExtraInfo() & MOUSEEVENTF_FROMTOUCH) != MOUSEEVENTF_FROMTOUCH) {
+            bool black;
+            int internal = hitTest(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), black);
+            int key = internalToKeyID(internal, black);
+            int external = SendMessage(hwParent, MMWM_NOTEID, key, 0);
+            SendMessage(hwParent, MMWM_TURNNOTE, external, 1);
+            SetKeyStatus(key, true);
+            lastNote = external;
+            lastKey = key;
+            mouseDown = true;
+            SetFocus(m_hwnd);
+            return 0;
+        }
+    case WM_LBUTTONUP:
+        if ((GetMessageExtraInfo() & MOUSEEVENTF_FROMTOUCH) != MOUSEEVENTF_FROMTOUCH) {
+            SendMessage(hwParent, MMWM_TURNNOTE, lastNote, 0);
+            SetKeyStatus(lastKey, false);
+            mouseDown = false;
+            return 0;
+        }
     case WM_MOUSEMOVE:
-        if (mouseDown) {
+        if ((GetMessageExtraInfo() & 0x82) != 0x82 && mouseDown) {
             bool black;
             int internal = hitTest(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), black);
             int key = internalToKeyID(internal, black);
@@ -564,6 +660,39 @@ LRESULT PianoControl::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_SYSCHAR:
     case WM_SYSDEADCHAR:
         return SendMessage(hwParent, uMsg, wParam, lParam);
+    case WM_TOUCH: {
+        if (!hasTouch)
+            break;
+
+        UINT cInputs = LOWORD(wParam);
+        TOUCHINPUT *pInputs = new TOUCHINPUT[cInputs];
+        if (pInputs != NULL) {
+            if (F_GetTouchInputInfo((HTOUCHINPUT) lParam, cInputs, pInputs, sizeof(TOUCHINPUT))) {
+                for (UINT i = 0; i < cInputs; ++i) {
+                    POINT ptInput;
+                    int id = GetTouchPointID(pInputs[i].dwID);
+                    if (id == -1)
+                        continue; // presumably you had 20 touch points
+
+                    ptInput.x = TOUCH_COORD_TO_PIXEL(pInputs[i].x);
+                    ptInput.y = TOUCH_COORD_TO_PIXEL(pInputs[i].y);
+                    ScreenToClient(m_hwnd, &ptInput);
+
+                    if (pInputs[i].dwFlags & TOUCHEVENTF_UP) {
+                        OnTouchPoint(id, -1, -1);
+                        touchPointID[id] = (DWORD) -1; // Free the ID
+                    } else {
+                        OnTouchPoint(id, ptInput.x, ptInput.y);
+                    }
+                }
+                F_CloseTouchInputHandle((HTOUCHINPUT) lParam);
+                delete [] pInputs;
+                return 0;
+            }
+            delete [] pInputs;
+        }
+        break;
+    }
     case WM_GETFONT:
         return (LRESULT) GetFont();
     case WM_SETFONT:

@@ -8,6 +8,10 @@
 #include <commctrl.h>
 #include <shellapi.h>
 
+typedef BOOL (WINAPI *T_GetTouchInputInfo)(HTOUCHINPUT hTouchInput, UINT cInputs, PTOUCHINPUT pInputs, int cbSize);
+typedef BOOL (WINAPI *T_CloseTouchInputHandle)(HTOUCHINPUT hTouchInput);
+typedef BOOL (WINAPI *T_RegisterTouchWindow)(HWND hWnd, ULONG ulFlags);
+
 #define MPCM_GETKEYSTATUS (WM_USER + 0)
 #define MPCM_SETKEYSTATUS (WM_USER + 1)
 #define MPCM_GETOCTAVES (WM_USER + 2)
@@ -19,6 +23,15 @@
 #define MMWM_TURNNOTE (WM_APP + 0)
 #define MMWM_NOTEID (WM_APP + 1)
 
+#define MAXPOINTS 20
+
+typedef struct {
+    bool down;
+    POINTL point;
+    int lastNote;
+    int lastKey;
+} PianoTouchPoint;
+
 class PianoControl : public Window {
 public:
     virtual LPCTSTR ClassName() { return TEXT("KeyboardControl"); }
@@ -26,13 +39,13 @@ public:
                                 DWORD dwStyle = 0,
                                 int x = CW_USEDEFAULT, int y = CW_USEDEFAULT,
                                 int cx = CW_USEDEFAULT, int cy = CW_USEDEFAULT);
-    
+
     virtual void SetOctaves(int octaves);
     virtual int GetOctaves() { return octaves; }
-    
+
     virtual void SetKeyStatus(int key, bool down);
     virtual bool GetKeyStatus(int key);
-    
+
     virtual void SetKeyText(int key, LPCWSTR text);
     virtual LPCWSTR GetKeyText(int key);
 
@@ -41,7 +54,7 @@ public:
 
     virtual void SetBackground(HBRUSH background) { hBackground = background; }
     virtual HBRUSH GetBackground() { return hBackground; }
-    
+
     HFONT GetFont() { return hFont; }
     void SetFont(HFONT font) { hFont = font; }
 protected:
@@ -51,7 +64,15 @@ protected:
     void OnPaint();
     virtual void PaintContent(PAINTSTRUCT *pps);
     BOOL WinRegisterClass(WNDCLASS *pwc);
-    
+
+    void OnTouchPoint(UINT id, int x, int y);
+    int GetTouchPointID(DWORD dwID);
+    PianoTouchPoint touchPoint[MAXPOINTS];
+    DWORD touchPointID[MAXPOINTS];
+    bool hasTouch;
+    T_GetTouchInputInfo F_GetTouchInputInfo;
+    T_CloseTouchInputHandle F_CloseTouchInputHandle;
+
     virtual int keyIDToInternal(int id, bool &black);
     virtual int internalToKeyID(int id, bool black);
     virtual bool haveBlackToLeft(int id);
@@ -61,21 +82,21 @@ protected:
     }
     virtual void UpdateKey(int key, bool black);
     virtual int hitTest(int x, int y, bool &black);
-    
+
     bool *blackStatus;
     bool *whiteStatus;
     LPCWSTR *blackText;
     LPCWSTR *whiteText;
-    
+
     int octaves;
     HFONT hFont;
     HWND hwParent;
-    
+
     HDC hMemDC;
     HBITMAP hMemBitmap;
     HBRUSH hBackground;
     int bmx, bmy;
-    
+
     bool mouseDown;
     int lastNote, lastKey;
 };

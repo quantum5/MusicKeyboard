@@ -25,20 +25,25 @@
 #define GET_KEYSTATE_WPARAM(wParam) (LOWORD(wParam))
 #endif
 
-#define KEYBOARD_IMAGE      0xAA00
-#define KEYBOARD_VOLUME     0xAA01
-#define KEYBOARD_FORCE      0xAA02
-#define KEYBOARD_INSTRUMENT 0xAA03
-#define KEYBOARD_DEVICE     0xAA04
-#define KEYBOARD_SEMITONE   0xAA05
-#define KEYBOARD_OCTAVE     0xAA06
-#define KEYBOARD_KEY        0xAA07
-#define KEYBOARD_USE_BEEP   0xAAFF
-#define KEYBOARD_SAVE       0xAB00
-#define KEYBOARD_SAVE_FILE  0xAB01
-#define KEYBOARD_BROWSE     0xAB02
-#define KEYBOARD_REOPEN     0xAB03
-#define KEYBOARD_CLOSE_FILE 0xAB04
+#define KEYBOARD_IMAGE       0xAA00
+#define KEYBOARD_VOLUME      0xAA01
+#define KEYBOARD_FORCE       0xAA02
+#define KEYBOARD_INSTRUMENT  0xAA03
+#define KEYBOARD_DEVICE      0xAA04
+#define KEYBOARD_SEMITONE    0xAA05
+#define KEYBOARD_OCTAVE      0xAA06
+#define KEYBOARD_KEY         0xAA07
+#define KEYBOARD_USE_BEEP    0xAAFF
+#define KEYBOARD_SAVE        0xAB00
+#define KEYBOARD_SAVE_FILE   0xAB01
+#define KEYBOARD_BROWSE      0xAB02
+#define KEYBOARD_REOPEN      0xAB03
+#define KEYBOARD_CLOSE_FILE  0xAB04
+
+#define KEYBOARD_ENTER_RADIO_BEGIN  0xAC00
+#define KEYBOARD_BSPIPE_ABOVE_ENTER 0xAC00
+#define KEYBOARD_BSPIPE_LEFT_ENTER  0xAC01
+#define KEYBOARD_ENTER_RADIO_END    0xAC01
 
 template<class T>
 T clamp(T v, T a, T b) {
@@ -66,6 +71,7 @@ protected:
 
     int GetMIDINote(WPARAM wCode, bool &half, int &base);
     int ModifyNote(int note, bool &half);
+    void UpdateNoteDisplay();
     virtual HICON GetIcon();
 
     int active[128];
@@ -89,6 +95,7 @@ protected:
     HWND m_keyLabel, m_keySelect;
     bool adjusting;
     HWND m_beepCheck;
+    HWND m_pipeLeftRadio, m_pipeAboveRadio;
     HWND m_saveCheck, m_saveLabel, m_saveFile, m_saveBrowse, m_reopen, m_closeFile;
     int m_instrument, m_volume, m_force, m_adjust;
     HMIDIOUT m_midi;
@@ -96,6 +103,8 @@ protected:
     HKL hklQWERTY;
     PianoControl *piano;
     LPWSTR m_keychars;
+    char m_keymap[256];
+    HKEY m_settings;
     MIDI_FILE *m_midifile;
     DWORD lastTime;
     bool saving;

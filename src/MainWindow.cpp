@@ -16,6 +16,7 @@
 
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "comdlg32.lib")
+#pragma comment(lib, "advapi32.lib")
 
 #include <stdio.h>
 #define MessageIntBox(hwnd, i, title, opt) \
@@ -130,6 +131,10 @@ int dnslen(LPWSTR dns)
     return i - dns;
 }
 
+inline void RegSetDWORD(HKEY hKey, LPTSTR name, DWORD value) {
+    RegSetValueEx(hKey, name, NULL, REG_DWORD, (LPBYTE) &value, sizeof value);
+}
+
 BOOL MainWindow::WinRegisterClass(WNDCLASS *pwc)
 {
     pwc->style = CS_HREDRAW | CS_VREDRAW;
@@ -209,6 +214,13 @@ LRESULT MainWindow::OnCreate()
             WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_KEY, GetInstance(), NULL);
 
+    m_pipeAboveRadio = CreateWindow(WC_BUTTON, L"|\\ key above Enter",
+            WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_TABSTOP,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_BSPIPE_ABOVE_ENTER, GetInstance(), NULL);
+    m_pipeLeftRadio = CreateWindow(WC_BUTTON, L"|\\ key left of Enter",
+            WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_TABSTOP,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_BSPIPE_LEFT_ENTER, GetInstance(), NULL);
+
     m_saveCheck = CreateWindow(WC_BUTTON, L"&Save?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_SAVE, GetInstance(), NULL);
     m_saveLabel = CreateWindow(WC_STATIC, L"File:",
@@ -248,6 +260,22 @@ LRESULT MainWindow::OnCreate()
     m_adjust = 0;
     saving = false;
     lastTime = (DWORD) -1;
+    memcpy(m_keymap, keymap, sizeof m_keymap);
+
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\Quantum\\MusicKeyboard", 0, NULL,
+                       0, KEY_ALL_ACCESS, NULL, &m_settings, NULL) != ERROR_SUCCESS)
+        m_settings = NULL;
+
+    DWORD bsLocation, dwSize = sizeof(DWORD);
+    if (!m_settings || RegQueryValueEx(m_settings, L"backslashLocation", NULL,
+            NULL, (LPBYTE) &bsLocation, &dwSize) != ERROR_SUCCESS)
+        bsLocation = 0;
+    CheckRadioButton(m_hwnd, KEYBOARD_ENTER_RADIO_BEGIN, KEYBOARD_ENTER_RADIO_END,
+                     KEYBOARD_ENTER_RADIO_BEGIN + bsLocation);
+    if (bsLocation == 1) {
+        m_keymap[VK_RETURN] = 77;
+        m_keymap[VK_OEM_5] = 76;
+    }
 
 #define SETFONT(hwnd) SendMessage(hwnd, WM_SETFONT, (WPARAM) hFont, (LPARAM) TRUE)
     SETFONT(m_volumeLabel);
@@ -265,6 +293,8 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_octaveLabel);
     SETFONT(m_keySelect);
     SETFONT(m_keyLabel);
+    SETFONT(m_pipeAboveRadio);
+    SETFONT(m_pipeLeftRadio);
     SETFONT(m_beepCheck);
     SETFONT(m_saveCheck);
     SETFONT(m_saveLabel);
@@ -325,7 +355,7 @@ LRESULT MainWindow::OnCreate()
     }
     capsDown = useBeep = adjusting = false;
     m_keychars = NULL;
-    PostMessage(m_hwnd, WM_INPUTLANGCHANGE, 0, 0);
+    UpdateNoteDisplay();
     return 0;
 }
 
@@ -334,6 +364,8 @@ LRESULT MainWindow::OnDestroy()
     midiOutClose(m_midi);
     if (m_midifile)
         midiFileClose(m_midifile);
+    if (m_settings)
+        RegCloseKey(m_settings);
     return 0;
 }
 
@@ -414,7 +446,7 @@ int MainWindow::ModifyNote(int note, bool &half) {
 
 int MainWindow::GetMIDINote(WPARAM wCode, bool &half, int &base)
 {
-    base = keymap[wCode];
+    base = m_keymap[wCode];
     return ModifyNote(base, half);
 }
 
@@ -423,7 +455,7 @@ bool MainWindow::Play(WPARAM wParam, LPARAM lParam, bool down)
     int base, note;
     bool half;
     WORD wCode = GetQWERTYKeyCode((WORD) wParam);
-    if (wCode > 255 || !keymap[wCode] || (down && (lParam & 0x40000000)))
+    if (wCode > 255 || !m_keymap[wCode] || (down && (lParam & 0x40000000)))
         return false;
 
     note = GetMIDINote(wCode, half, base);
@@ -602,6 +634,45 @@ void MainWindow::OnAdjust()
     //if (!useBeep) MIDI_MESSAGE(m_midi, 0xB0, 122, 0);
 }
 
+void MainWindow::UpdateNoteDisplay()
+{
+    TCHAR buf[KL_NAMELENGTH];
+    GetKeyboardLayoutName(buf);
+    isQWERTY = lstrcmpi(buf, L"00000409") == 0;
+    if (!isQWERTY && !hklQWERTY)
+        hklQWERTY = LoadKeyboardLayout(L"00000409", KLF_NOTELLSHELL);
+
+    int size = dnslen(keychars) + 1, i;
+    LPWSTR s;
+    if (m_keychars)
+        delete [] m_keychars;
+    m_keychars = new WCHAR[size];
+    bool bsLeft = IsDlgButtonChecked(m_hwnd, KEYBOARD_BSPIPE_LEFT_ENTER);
+    for (i = 0; i < size; ++i) {
+        WORD scan = VkKeyScanEx(keychars[i], hklQWERTY), vk, ch;
+        if (bsLeft) switch (keychars[i]) {
+            case L'\\': m_keychars[i] = L'\x21b5'; continue;
+            case L'\x21b5': m_keychars[i] = L'\\'; continue;
+        }
+        if (LOBYTE(scan) == -1)
+            goto giveup;
+        vk = GetRealKeyCode(LOBYTE(scan));
+        if (!vk || vk == LOBYTE(scan))
+            goto giveup;
+        ch = (WCHAR) MapVirtualKey(vk, MAPVK_VK_TO_CHAR);
+        if (!ch)
+            goto giveup;
+        m_keychars[i] = ch;
+        continue;
+
+        giveup:
+        m_keychars[i] = keychars[i];
+    }
+
+    for (s = m_keychars, i = 0; i < 24 && lstrlen(s); s += lstrlen(s) + 1, ++i)
+        piano->SetKeyText(i, s);
+}
+
 LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg) {
@@ -641,15 +712,17 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         GetClientRect(m_hwnd, &client);
 #define REPOS(hwnd, k) hdwp = DeferWindowPos(hdwp, hwnd, 0, k, SWP_NOACTIVATE|SWP_NOZORDER)
         hdwp = BeginDeferWindowPos(14);
-        REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 232));
-        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 187, 70, 25));
-        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 187, client.right - 94, 25));
-        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 157, 70, 25));
-        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 157, client.right - 94, 25));
-        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 127, 70, 25));
-        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 127, client.right - 94, 25));
-        REPOS(m_deviceLabel,    BOTTOM(12, client.bottom - 97, 70, 25));
-        REPOS(m_deviceSelect,   BOTTOM(82, client.bottom - 97, client.right - 94, 25));
+        REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 262));
+        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 217, 70, 25));
+        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 217, client.right - 94, 25));
+        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 187, 70, 25));
+        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 187, client.right - 94, 25));
+        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 157, 70, 25));
+        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 157, client.right - 94, 25));
+        REPOS(m_deviceLabel,    BOTTOM(12, client.bottom - 127, 70, 25));
+        REPOS(m_deviceSelect,   BOTTOM(82, client.bottom - 127, client.right - 94, 25));
+        REPOS(m_pipeAboveRadio, BOTTOM(12, client.bottom - 97, 150, 25));
+        REPOS(m_pipeLeftRadio,  BOTTOM(162, client.bottom - 97, 150, 25));
         REPOS(m_adjustLabel,    BOTTOM(12, client.bottom - 67, 70, 25));
         REPOS(m_semitoneSelect, BOTTOM(82, client.bottom - 67, 50, 20));
         REPOS(m_semitoneUpDown, BOTTOM(132, client.bottom - 67, 18, 20));
@@ -737,6 +810,20 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     OnReOpenMIDI();
                     break;
                 }
+                case KEYBOARD_BSPIPE_ABOVE_ENTER:
+                    m_keymap[VK_RETURN] = 76;
+                    m_keymap[VK_OEM_5] = 77;
+                    RegSetDWORD(m_settings, L"backslashLocation", 0);
+                    UpdateNoteDisplay();
+                    SetFocus(m_hwnd);
+                    break;
+                case KEYBOARD_BSPIPE_LEFT_ENTER:
+                    m_keymap[VK_RETURN] = 77;
+                    m_keymap[VK_OEM_5] = 76;
+                    RegSetDWORD(m_settings, L"backslashLocation", 1);
+                    UpdateNoteDisplay();
+                    SetFocus(m_hwnd);
+                    break;
                 case KEYBOARD_REOPEN:
                     OnReOpenMIDI();
                     break;
@@ -822,38 +909,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             SendMessage(m_forceBar, WM_MOUSEWHEEL,
                 -GET_WHEEL_DELTA_WPARAM(wParam) * 2 << 16 |
                         GET_KEYSTATE_WPARAM(wParam), lParam);
-    case WM_INPUTLANGCHANGE: {
-        TCHAR buf[KL_NAMELENGTH];
-        GetKeyboardLayoutName(buf);
-        isQWERTY = lstrcmpi(buf, L"00000409") == 0;
-        if (!isQWERTY && !hklQWERTY)
-            hklQWERTY = LoadKeyboardLayout(L"00000409", KLF_NOTELLSHELL);
-
-        int size = dnslen(keychars) + 1, i;
-        LPWSTR s;
-        if (m_keychars)
-            delete [] m_keychars;
-        m_keychars = new WCHAR[size];
-        for (i = 0; i < size; ++i) {
-            WORD scan = VkKeyScanEx(keychars[i], hklQWERTY), vk, ch;
-            if (LOBYTE(scan) == -1)
-                goto giveup;
-            vk = GetRealKeyCode(LOBYTE(scan));
-            if (!vk || vk == LOBYTE(scan))
-                goto giveup;
-            ch = (WCHAR) MapVirtualKey(vk, MAPVK_VK_TO_CHAR);
-            if (!ch)
-                goto giveup;
-            m_keychars[i] = ch;
-            continue;
-
-            giveup:
-            m_keychars[i] = keychars[i];
-        }
-
-        for (s = m_keychars, i = 0; i < 24 && lstrlen(s); s += lstrlen(s) + 1, ++i)
-            piano->SetKeyText(i, s);
-    }
+    case WM_INPUTLANGCHANGE:
+        UpdateNoteDisplay();
+        return 0;
     case WM_CHAR:
     case WM_DEADCHAR:
     case WM_SYSCHAR:
@@ -883,7 +941,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 MainWindow *MainWindow::Create(LPCTSTR szTitle)
 {
     MainWindow *self = new MainWindow();
-    RECT client = {0, 0, 622, 401};
+    RECT client = {0, 0, 622, 431};
     AdjustWindowRect(&client, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE);
     if (self &&
         self->WinCreateWindow(0,

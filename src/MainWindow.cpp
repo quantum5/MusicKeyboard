@@ -223,6 +223,9 @@ LRESULT MainWindow::OnCreate()
     m_reopen = CreateWindow(WC_BUTTON, L"R&eopen",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_REOPEN, GetInstance(), NULL);
+    m_closeFile = CreateWindow(WC_BUTTON, L"&Close",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_DISABLED | WS_TABSTOP,
+            0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_CLOSE_FILE, GetInstance(), NULL);
 
     m_beepCheck = CreateWindow(WC_BUTTON, L"&Beep?", WS_CHILD | WS_VISIBLE | BS_CHECKBOX | WS_TABSTOP,
             0, 0, 0, 0, m_hwnd, (HMENU) KEYBOARD_USE_BEEP, GetInstance(), NULL);
@@ -268,6 +271,7 @@ LRESULT MainWindow::OnCreate()
     SETFONT(m_saveFile);
     SETFONT(m_saveBrowse);
     SETFONT(m_reopen);
+    SETFONT(m_closeFile);
 #undef SETFONT
 
     SendMessage(m_keySelect, CB_INITSTORAGE, 12, 128);
@@ -524,6 +528,17 @@ void MainWindow::OnReOpenMIDI()
     midiFileSetTracksDefaultChannel(m_midifile, 1, MIDI_CHANNEL_1);
     midiTrackAddProgramChange(m_midifile, 1, m_instrument);
     midiSongAddSimpleTimeSig(m_midifile, 1, 4, MIDI_NOTE_CROCHET);
+
+    EnableWindow(m_closeFile, TRUE);
+    SetFocus(m_hwnd);
+}
+
+void MainWindow::OnCloseMIDI()
+{
+    if (m_midifile)
+        midiFileClose(m_midifile);
+    m_midifile = NULL;
+    EnableWindow(m_closeFile, FALSE);
 }
 
 LRESULT CALLBACK MainWindow::LowLevelKeyboardHook(HHOOK hHook, int nCode, WPARAM wParam, LPARAM lParam) {
@@ -646,9 +661,10 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         REPOS(m_keySelect,      BOTTOM(390, client.bottom - 67, 65, 22));
         REPOS(m_saveCheck,      BOTTOM(22, client.bottom - 42, 50, 20));
         REPOS(m_saveLabel,      BOTTOM(27, client.bottom - 19, 30, 20));
-        REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 249, 25));
-        REPOS(m_saveBrowse,     BOTTOMRIGHT(client.right - 102, client.bottom - 17, 80, 25));
-        REPOS(m_reopen,         BOTTOMRIGHT(client.right - 17, client.bottom - 17, 80, 25));
+        REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 334, 25));
+        REPOS(m_saveBrowse,     BOTTOMRIGHT(client.right - 187, client.bottom - 17, 80, 25));
+        REPOS(m_reopen,         BOTTOMRIGHT(client.right - 102, client.bottom - 17, 80, 25));
+        REPOS(m_closeFile,      BOTTOMRIGHT(client.right - 17, client.bottom - 17, 80, 25));
         REPOS(m_beepCheck,      BOTTOMRIGHT(client.right - 17, client.bottom - 42, 60, 20));
         EndDeferWindowPos(hdwp);
 #undef REPOS
@@ -693,6 +709,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     EnableWindow(m_saveFile, checked);
                     EnableWindow(m_saveBrowse, checked);
                     EnableWindow(m_reopen, Edit_GetTextLength(m_saveFile) > 0 ? checked : FALSE);
+                    EnableWindow(m_closeFile, m_midifile != NULL);
                     saving = checked == TRUE;
                     break;
                 }
@@ -723,11 +740,14 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 case KEYBOARD_REOPEN:
                     OnReOpenMIDI();
                     break;
+                case KEYBOARD_CLOSE_FILE:
+                    OnCloseMIDI();
+                    break;
             }
             break;
         case EN_CHANGE:
-            switch (LOWORD(wParam))
-            case KEYBOARD_OCTAVE: {
+            switch (LOWORD(wParam)) {
+            case KEYBOARD_OCTAVE:
                 if (!adjusting) {
                     int o = GetDlgItemInt(m_hwnd, KEYBOARD_OCTAVE, NULL, TRUE);
                     int octave = clamp(o, -3, 3);
@@ -754,9 +774,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
                 }
                 break;
             case KEYBOARD_SAVE_FILE:
-                if (IsDlgButtonChecked(m_hwnd, KEYBOARD_SAVE) &&
-                    Edit_GetTextLength(m_saveFile) > 0)
-                        EnableWindow(m_reopen, TRUE);
+                EnableWindow(m_reopen, IsDlgButtonChecked(m_hwnd, KEYBOARD_SAVE) &&
+                             Edit_GetTextLength(m_saveFile) > 0);
+                EnableWindow(m_closeFile, m_midifile != NULL);
                 break;
             }
         }

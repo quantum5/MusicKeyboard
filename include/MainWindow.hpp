@@ -38,6 +38,7 @@
 #define KEYBOARD_SAVE_FILE  0xAB01
 #define KEYBOARD_BROWSE     0xAB02
 #define KEYBOARD_REOPEN     0xAB03
+#define KEYBOARD_CLOSE_FILE 0xAB04
 
 template<class T>
 T clamp(T v, T a, T b) {
@@ -60,6 +61,7 @@ protected:
     WORD GetRealKeyCode(WORD wQWERTYCode);
     virtual void PaintContent(PAINTSTRUCT *pps);
     void OnReOpenMIDI();
+    void OnCloseMIDI();
     void OnAdjust();
 
     int GetMIDINote(WPARAM wCode, bool &half, int &base);
@@ -87,7 +89,7 @@ protected:
     HWND m_keyLabel, m_keySelect;
     bool adjusting;
     HWND m_beepCheck;
-    HWND m_saveCheck, m_saveLabel, m_saveFile, m_saveBrowse, m_reopen;
+    HWND m_saveCheck, m_saveLabel, m_saveFile, m_saveBrowse, m_reopen, m_closeFile;
     int m_instrument, m_volume, m_force, m_adjust;
     HMIDIOUT m_midi;
     bool isQWERTY;

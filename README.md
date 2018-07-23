@@ -4,7 +4,7 @@ This free and open source program emulates a piano, but can use all available MI
 
 ## Features
 
-![MusicKeyboard Screenshot](https://quantum2.xyz/wp-content/uploads/2017/07/MusicKeyboard.png)
+![MusicKeyboard Screenshot](https://guanzhong.ca/assets/projects/MusicKeyboard-16b281f66a99af3d8849427148fe0a193e3defdef6438912603113af2cd52e5f.png)
 
 * Full chording support in program, but due to the keyboard chording limitations, only 3 - 7 keys may be pressed simultaneously, so your milage may vary.
 * Multitouch with hardware support.

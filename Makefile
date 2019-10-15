@@ -63,4 +63,4 @@ $(OUTDIR)\keyboard.res: keyboard.rc
 	$(CXX) $(CXXFLAGS) /Fo$(OUTDIR)\ /Fd$(OUTDIR)\ $<
 
 $(DISTDIR)\Keyboard.exe: $(FILES)
-	$(LD) /out:$@ $(LDFLAGS) $** $(LIBS)
+	$(LD) /out:$@ $(LDFLAGS) $** $(LIBS) /manifest:embed /manifestinput:highdpi.manifest /manifestinput:commctrl6.manifest

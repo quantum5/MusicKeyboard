@@ -5,6 +5,7 @@
 #include <commctrl.h>
 #include <commdlg.h>
 #include <windowsx.h>
+#include <ShellScalingAPI.h>
 
 #define LEFT(x, y, cx, cy) x, y, cx, cy
 #define RIGHT(x, y, cx, cy) (x - cx), y, cx, cy
@@ -142,13 +143,39 @@ BOOL MainWindow::WinRegisterClass(WNDCLASS *pwc)
     return Window::WinRegisterClass(pwc);
 }
 
+typedef HRESULT (WINAPI *FN_GETDPIFORMONITOR)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
+
+void MainWindow::UpdateScale()
+{
+    HMONITOR hMonitor = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTONEAREST);
+    HMODULE hShCore;
+
+    m_scale = 1;
+
+    hShCore = LoadLibrary(L"ShCore.dll");
+    if (hShCore) {
+        FN_GETDPIFORMONITOR GetDpiForMonitor =
+                (FN_GETDPIFORMONITOR) GetProcAddress(hShCore, "GetDpiForMonitor");
+        if (GetDpiForMonitor) {
+            UINT dpiX, dpiY;
+            GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+            m_scale = dpiX / 96.0;
+        }
+    }
+}
+
 LRESULT MainWindow::OnCreate()
 {
+    UpdateScale();
+
+    RECT client = {0, 0, scale(622), scale(431)};
+    AdjustWindowRect(&client, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE);
+    SetWindowPos(m_hwnd, NULL, 0, 0, client.right - client.left,
+                 client.bottom - client.top, SWP_NOMOVE | SWP_NOZORDER);
+
     NONCLIENTMETRICS ncmMetrics = { sizeof(NONCLIENTMETRICS) };
-    RECT client;
 
     SystemParametersInfo(SPI_GETNONCLIENTMETRICS, 0, &ncmMetrics, 0);
-    GetClientRect(m_hwnd, &client);
 
     hFont = CreateFontIndirect(&ncmMetrics.lfMessageFont);
 
@@ -530,7 +557,8 @@ void MainWindow::PaintContent(PAINTSTRUCT *pps)
     SetBkColor(pps->hdc, GetSysColor(COLOR_3DFACE));
     SetDCPenColor(pps->hdc, GetSysColor(COLOR_3DHILIGHT));
 
-    RoundRect(pps->hdc, 12, client.bottom - 52, client.right - 12, client.bottom - 12, 5, 5);
+    RoundRect(pps->hdc, scale(12), client.bottom - scale(52), client.right - scale(12),
+              client.bottom - scale(12), scale(5), scale(5));
 
     SelectPen(pps->hdc, hOldPen);
     SelectBrush(pps->hdc, hOldBrush);
@@ -706,41 +734,52 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_NCDESTROY:
         PostQuitMessage(0);
         break;
+    case WM_DPICHANGED: {
+        LPRECT lpBox = (LPRECT) lParam;
+        m_scale = LOWORD(wParam) / 96.0;
+        SetWindowPos(m_hwnd, NULL, lpBox->left, lpBox->top, lpBox->right - lpBox->left,
+                     lpBox->bottom - lpBox->top, SWP_NOZORDER | SWP_NOACTIVATE);
+        RedrawWindow(m_hwnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE);
+        break;
+    }
     case WM_SIZE: {
         RECT client;
         HDWP hdwp;
+        if (!piano) return 0;
         GetClientRect(m_hwnd, &client);
-#define REPOS(hwnd, k) hdwp = DeferWindowPos(hdwp, hwnd, 0, k, SWP_NOACTIVATE|SWP_NOZORDER)
-        hdwp = BeginDeferWindowPos(14);
-        REPOS(piano->GetHWND(), LEFT(12, 12, client.right - 24, client.bottom - 262));
-        REPOS(m_instruLabel,    BOTTOM(12, client.bottom - 217, 70, 25));
-        REPOS(m_instruSelect,   BOTTOM(82, client.bottom - 217, client.right - 94, 25));
-        REPOS(m_forceLabel,     BOTTOM(12, client.bottom - 187, 70, 25));
-        REPOS(m_forceBar,       BOTTOM(82, client.bottom - 187, client.right - 94, 25));
-        REPOS(m_volumeLabel,    BOTTOM(12, client.bottom - 157, 70, 25));
-        REPOS(m_volumeBar,      BOTTOM(82, client.bottom - 157, client.right - 94, 25));
-        REPOS(m_deviceLabel,    BOTTOM(12, client.bottom - 127, 70, 25));
-        REPOS(m_deviceSelect,   BOTTOM(82, client.bottom - 127, client.right - 94, 25));
-        REPOS(m_pipeAboveRadio, BOTTOM(12, client.bottom - 97, 150, 25));
-        REPOS(m_pipeLeftRadio,  BOTTOM(162, client.bottom - 97, 150, 25));
-        REPOS(m_adjustLabel,    BOTTOM(12, client.bottom - 67, 70, 25));
-        REPOS(m_semitoneSelect, BOTTOM(82, client.bottom - 67, 50, 20));
-        REPOS(m_semitoneUpDown, BOTTOM(132, client.bottom - 67, 18, 20));
-        REPOS(m_semitoneLabel,  BOTTOM(155, client.bottom - 67, 60, 20));
-        REPOS(m_octaveSelect,   BOTTOM(220, client.bottom - 67, 50, 20));
-        REPOS(m_octaveUpDown,   BOTTOM(270, client.bottom - 67, 18, 20));
-        REPOS(m_octaveLabel,    BOTTOM(293, client.bottom - 67, 50, 20));
-        REPOS(m_keyLabel,       BOTTOM(345, client.bottom - 67, 45, 20));
-        REPOS(m_keySelect,      BOTTOM(390, client.bottom - 67, 65, 22));
-        REPOS(m_saveCheck,      BOTTOM(22, client.bottom - 42, 50, 20));
-        REPOS(m_saveLabel,      BOTTOM(27, client.bottom - 19, 30, 20));
-        REPOS(m_saveFile,       BOTTOM(62, client.bottom - 17, client.right - 334, 25));
-        REPOS(m_saveBrowse,     BOTTOMRIGHT(client.right - 187, client.bottom - 17, 80, 25));
-        REPOS(m_reopen,         BOTTOMRIGHT(client.right - 102, client.bottom - 17, 80, 25));
-        REPOS(m_closeFile,      BOTTOMRIGHT(client.right - 17, client.bottom - 17, 80, 25));
-        REPOS(m_beepCheck,      BOTTOMRIGHT(client.right - 17, client.bottom - 42, 60, 20));
+#define s(x) scale(x)
+#define REPOS(hwnd, k) hdwp = DeferWindowPos(hdwp, hwnd, 0, k, SWP_NOACTIVATE | SWP_NOZORDER)
+        hdwp = BeginDeferWindowPos(27);
+        REPOS(piano->GetHWND(), LEFT(s(12), s(12), client.right - s(24), client.bottom - s(262)));
+        REPOS(m_instruLabel,    BOTTOM(s(12),  client.bottom - s(217), s(70), s(25)));
+        REPOS(m_instruSelect,   BOTTOM(s(82),  client.bottom - s(217), client.right - s(94), s(25)));
+        REPOS(m_forceLabel,     BOTTOM(s(12),  client.bottom - s(187), s(70), s(25)));
+        REPOS(m_forceBar,       BOTTOM(s(82),  client.bottom - s(187), client.right - s(94), s(25)));
+        REPOS(m_volumeLabel,    BOTTOM(s(12),  client.bottom - s(157), s(70), s(25)));
+        REPOS(m_volumeBar,      BOTTOM(s(82),  client.bottom - s(157), client.right - s(94), s(25)));
+        REPOS(m_deviceLabel,    BOTTOM(s(12),  client.bottom - s(127), s(70), s(25)));
+        REPOS(m_deviceSelect,   BOTTOM(s(82),  client.bottom - s(127), client.right - s(94), s(25)));
+        REPOS(m_pipeAboveRadio, BOTTOM(s(12),  client.bottom - s(97),  s(150), s(25)));
+        REPOS(m_pipeLeftRadio,  BOTTOM(s(162), client.bottom - s(97),  s(150), s(25)));
+        REPOS(m_adjustLabel,    BOTTOM(s(12),  client.bottom - s(67),  s(70),  s(25)));
+        REPOS(m_semitoneSelect, BOTTOM(s(82),  client.bottom - s(67),  s(50),  s(20)));
+        REPOS(m_semitoneUpDown, BOTTOM(s(132), client.bottom - s(67),  s(18),  s(20)));
+        REPOS(m_semitoneLabel,  BOTTOM(s(155), client.bottom - s(67),  s(60),  s(20)));
+        REPOS(m_octaveSelect,   BOTTOM(s(220), client.bottom - s(67),  s(50),  s(20)));
+        REPOS(m_octaveUpDown,   BOTTOM(s(270), client.bottom - s(67),  s(18),  s(20)));
+        REPOS(m_octaveLabel,    BOTTOM(s(293), client.bottom - s(67),  s(50),  s(20)));
+        REPOS(m_keyLabel,       BOTTOM(s(345), client.bottom - s(67),  s(45),  s(20)));
+        REPOS(m_keySelect,      BOTTOM(s(390), client.bottom - s(67),  s(65),  s(22)));
+        REPOS(m_saveCheck,      BOTTOM(s(22),  client.bottom - s(42),  s(50),  s(20)));
+        REPOS(m_saveLabel,      BOTTOM(s(27),  client.bottom - s(19),  s(30),  s(20)));
+        REPOS(m_saveFile,       BOTTOM(s(62),  client.bottom - s(17),  client.right - s(334), s(25)));
+        REPOS(m_saveBrowse,     BOTTOMRIGHT(client.right - s(187), client.bottom - s(17), s(80), s(25)));
+        REPOS(m_reopen,         BOTTOMRIGHT(client.right - s(102), client.bottom - s(17), s(80), s(25)));
+        REPOS(m_closeFile,      BOTTOMRIGHT(client.right - s(17),  client.bottom - s(17), s(80), s(25)));
+        REPOS(m_beepCheck,      BOTTOMRIGHT(client.right - s(17),  client.bottom - s(42), s(60), s(20)));
         EndDeferWindowPos(hdwp);
 #undef REPOS
+#undef s
         return 0;
     }
     case WM_COMMAND:
@@ -941,13 +980,11 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 MainWindow *MainWindow::Create(LPCTSTR szTitle)
 {
     MainWindow *self = new MainWindow();
-    RECT client = {0, 0, 622, 431};
-    AdjustWindowRect(&client, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE);
     if (self &&
         self->WinCreateWindow(0,
                 szTitle, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-                CW_USEDEFAULT, CW_USEDEFAULT, client.right - client.left,
-                client.bottom - client.top, NULL, NULL)) {
+                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                NULL, NULL)) {
         return self;
     }
     delete self;

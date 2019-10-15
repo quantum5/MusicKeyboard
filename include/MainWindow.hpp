@@ -74,6 +74,9 @@ protected:
     void UpdateNoteDisplay();
     virtual HICON GetIcon();
 
+    void UpdateScale();
+    int scale(int unscaled) { return static_cast<int>(m_scale * unscaled); }
+
     int active[128];
     bool capsDown;
     bool useBeep;
@@ -108,6 +111,7 @@ protected:
     MIDI_FILE *m_midifile;
     DWORD lastTime;
     bool saving;
+    double m_scale;
 
     LRESULT CALLBACK LowLevelKeyboardHook(HHOOK hHook, int nCode, WPARAM wParam, LPARAM lParam);
     static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);

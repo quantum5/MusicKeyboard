@@ -76,6 +76,7 @@ protected:
 
     void UpdateScale();
     int scale(int unscaled) { return static_cast<int>(m_scale * unscaled); }
+    void UpdateFont();
 
     int active[128];
     bool capsDown;
@@ -119,8 +120,6 @@ protected:
     static void UnhookWindow(MainWindow *window);
     static MainWindow *activeHookWindow;
     static HHOOK activeHook;
-private:
-    HFONT hFont;
 };
 
 #endif

@@ -144,22 +144,28 @@ BOOL MainWindow::WinRegisterClass(WNDCLASS *pwc)
 }
 
 typedef HRESULT (WINAPI *FN_GETDPIFORMONITOR)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
+typedef UINT (WINAPI *FN_GETDPIFORWINDOW)(HWND);
+typedef BOOL (WINAPI *FN_SYSTEMPARAMETERSINFOFORDPI)(UINT, UINT, PVOID, UINT, UINT);
 
 void MainWindow::UpdateScale()
 {
-    HMONITOR hMonitor = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTONEAREST);
-    HMODULE hShCore;
-
     m_scale = 1;
 
-    hShCore = LoadLibrary(L"ShCore.dll");
-    if (hShCore) {
-        FN_GETDPIFORMONITOR GetDpiForMonitor =
-                (FN_GETDPIFORMONITOR) GetProcAddress(hShCore, "GetDpiForMonitor");
-        if (GetDpiForMonitor) {
-            UINT dpiX, dpiY;
-            GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
-            m_scale = dpiX / 96.0;
+    FN_GETDPIFORWINDOW GetDpiForWindow = (FN_GETDPIFORWINDOW) GetProcAddress(
+            GetModuleHandle(L"user32.dll"), "GetDpiForWindow");
+    if (GetDpiForWindow) {
+        m_scale = GetDpiForWindow(m_hwnd) / 96.0;
+    } else {
+        HMONITOR hMonitor = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTONEAREST);
+        HMODULE hShCore = LoadLibrary(L"ShCore.dll");
+        if (hShCore) {
+            FN_GETDPIFORMONITOR GetDpiForMonitor =
+                    (FN_GETDPIFORMONITOR) GetProcAddress(hShCore, "GetDpiForMonitor");
+            if (GetDpiForMonitor) {
+                UINT dpiX, dpiY;
+                GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+                m_scale = dpiX / 96.0;
+            }
         }
     }
 }
@@ -172,12 +178,6 @@ LRESULT MainWindow::OnCreate()
     AdjustWindowRect(&client, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE);
     SetWindowPos(m_hwnd, NULL, 0, 0, client.right - client.left,
                  client.bottom - client.top, SWP_NOMOVE | SWP_NOZORDER);
-
-    NONCLIENTMETRICS ncmMetrics = { sizeof(NONCLIENTMETRICS) };
-
-    SystemParametersInfo(SPI_GETNONCLIENTMETRICS, 0, &ncmMetrics, 0);
-
-    hFont = CreateFontIndirect(&ncmMetrics.lfMessageFont);
 
     // For debugging
     /*AllocConsole();
@@ -280,6 +280,8 @@ LRESULT MainWindow::OnCreate()
     SendMessage(m_octaveUpDown, UDM_SETRANGE32, (WPARAM) -3, 3);
     SendMessage(m_octaveUpDown, UDM_SETPOS32, 0, 0);
 
+    UpdateFont();
+
     m_force = 64;
     m_volume = 0xFFFF;
     m_midifile = NULL;
@@ -303,33 +305,6 @@ LRESULT MainWindow::OnCreate()
         m_keymap[VK_RETURN] = 77;
         m_keymap[VK_OEM_5] = 76;
     }
-
-#define SETFONT(hwnd) SendMessage(hwnd, WM_SETFONT, (WPARAM) hFont, (LPARAM) TRUE)
-    SETFONT(m_volumeLabel);
-    SETFONT(m_volumeBar);
-    SETFONT(m_forceLabel);
-    SETFONT(m_forceBar);
-    SETFONT(m_instruLabel);
-    SETFONT(m_instruSelect);
-    SETFONT(m_deviceLabel);
-    SETFONT(m_deviceSelect);
-    SETFONT(m_adjustLabel);
-    SETFONT(m_semitoneSelect);
-    SETFONT(m_semitoneLabel);
-    SETFONT(m_octaveSelect);
-    SETFONT(m_octaveLabel);
-    SETFONT(m_keySelect);
-    SETFONT(m_keyLabel);
-    SETFONT(m_pipeAboveRadio);
-    SETFONT(m_pipeLeftRadio);
-    SETFONT(m_beepCheck);
-    SETFONT(m_saveCheck);
-    SETFONT(m_saveLabel);
-    SETFONT(m_saveFile);
-    SETFONT(m_saveBrowse);
-    SETFONT(m_reopen);
-    SETFONT(m_closeFile);
-#undef SETFONT
 
     SendMessage(m_keySelect, CB_INITSTORAGE, 12, 128);
     for (int i = 0; i < 12; ++i)
@@ -384,6 +359,53 @@ LRESULT MainWindow::OnCreate()
     m_keychars = NULL;
     UpdateNoteDisplay();
     return 0;
+}
+
+void MainWindow::UpdateFont()
+{
+    NONCLIENTMETRICSW ncmMetrics = { sizeof(NONCLIENTMETRICSW) };
+    HMODULE hmUser32 = GetModuleHandle(L"user32.dll");
+    FN_GETDPIFORWINDOW GetDpiForWindow =
+            (FN_GETDPIFORWINDOW) GetProcAddress(hmUser32, "GetDpiForWindow");
+    FN_SYSTEMPARAMETERSINFOFORDPI SystemParametersInfoForDpi =
+            (FN_SYSTEMPARAMETERSINFOFORDPI) GetProcAddress(hmUser32, "SystemParametersInfoForDpi");
+
+    if (GetDpiForWindow && SystemParametersInfoForDpi) {
+        UINT dpi = GetDpiForWindow(m_hwnd);
+        SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof ncmMetrics, &ncmMetrics, 0, dpi);
+    } else {
+        SystemParametersInfo(SPI_GETNONCLIENTMETRICS, 0, &ncmMetrics, 0);
+        ncmMetrics.lfMessageFont.lfHeight = scale(-12);
+    }
+
+    HFONT hFont = CreateFontIndirect(&ncmMetrics.lfMessageFont);
+
+#define SETFONT(hwnd) SendMessage(hwnd, WM_SETFONT, (WPARAM) hFont, (LPARAM) TRUE)
+    SETFONT(m_volumeLabel);
+    SETFONT(m_volumeBar);
+    SETFONT(m_forceLabel);
+    SETFONT(m_forceBar);
+    SETFONT(m_instruLabel);
+    SETFONT(m_instruSelect);
+    SETFONT(m_deviceLabel);
+    SETFONT(m_deviceSelect);
+    SETFONT(m_adjustLabel);
+    SETFONT(m_semitoneSelect);
+    SETFONT(m_semitoneLabel);
+    SETFONT(m_octaveSelect);
+    SETFONT(m_octaveLabel);
+    SETFONT(m_keySelect);
+    SETFONT(m_keyLabel);
+    SETFONT(m_pipeAboveRadio);
+    SETFONT(m_pipeLeftRadio);
+    SETFONT(m_beepCheck);
+    SETFONT(m_saveCheck);
+    SETFONT(m_saveLabel);
+    SETFONT(m_saveFile);
+    SETFONT(m_saveBrowse);
+    SETFONT(m_reopen);
+    SETFONT(m_closeFile);
+#undef SETFONT
 }
 
 LRESULT MainWindow::OnDestroy()
@@ -737,6 +759,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_DPICHANGED: {
         LPRECT lpBox = (LPRECT) lParam;
         m_scale = LOWORD(wParam) / 96.0;
+        UpdateFont();
         SetWindowPos(m_hwnd, NULL, lpBox->left, lpBox->top, lpBox->right - lpBox->left,
                      lpBox->bottom - lpBox->top, SWP_NOZORDER | SWP_NOACTIVATE);
         RedrawWindow(m_hwnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE);
